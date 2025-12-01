@@ -1,108 +1,95 @@
-#!/bin/bash
-
-set -e
+#!/bin/sh
 
 echo "=== EMPTY IBM i Deployment Script ==="
 
-# ---------------------------------------------------------
-# 1. Variables (replace where noted)
-# ---------------------------------------------------------
+# -------------------------
+# 1. Environment Variables
+# -------------------------
 
-API_KEY="${IBMCLOUD_API_KEY}"     # From Code Engine secret
+API_KEY="${IBMCLOUD_API_KEY}"   # Provided via Code Engine secret
 
-PVS_REGION="us-south"
-PVS_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"  # PowerVS Workspace CRN UUID
-LPAR_NAME="empty-ibmi-lpar"
-
-# This is correct for EMPTY IBM i
-IMAGE_ID="IBMI-EMPTY"
-
+# PowerVS Information
+REGION="us-south"
+ZONE="dal10"
+CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"   # Extracted correctly from CRN
 SUBNET_ID="ca78b0d5-f77f-4e8c-9f2c-545ca20ff073"
-PRIVATE_IP="192.168.0.69"
+KEYPAIR_NAME="murphy-clone-key"
 
-SSH_KEY_NAME="murphy-clone-key"  # Must exist in your workspace
-
-MEM_GB=2
-CORES=0.25
+# LPAR Settings
+LPAR_NAME="empty-ibmi-lpar"
+MEMORY_GB=2
+PROCESSORS=0.25
 PROC_TYPE="shared"
 SYS_TYPE="s1022"
 
-IAM_ENDPOINT="https://iam.cloud.ibm.com/identity/token"
-PVS_API_BASE="https://${PVS_REGION}.power-iaas.cloud.ibm.com"
-API_VERSION="2024-02-28"
+# EMPTY IBM i identifier (SPECIAL)
+IMAGE_ID="IBMI-EMPTY"
 
-# ---------------------------------------------------------
-# 2. Get IAM Access Token
-# ---------------------------------------------------------
+# -------------------------
+# 2. Get IAM Token
+# -------------------------
 
 echo "--- Requesting IAM access token ---"
 
-IAM_RESPONSE=$(curl -s -X POST "${IAM_ENDPOINT}" \
-    -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "grant_type=urn:ibm:params:oauth:grant-type:apikey" \
-    -d "apikey=${API_KEY}")
+IAM_TOKEN=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${API_KEY}" | jq -r '.access_token')
 
-ACCESS_TOKEN=$(echo "$IAM_RESPONSE" | jq -r '.access_token')
-
-if [[ "$ACCESS_TOKEN" == "null" || -z "$ACCESS_TOKEN" ]]; then
-  echo "ERROR: Failed to fetch IAM token"
-  echo "Response: $IAM_RESPONSE"
+if [ "$IAM_TOKEN" = "null" ] || [ -z "$IAM_TOKEN" ]; then
+  echo "ERROR retrieving IAM token"
   exit 1
 fi
 
 echo "--- Token acquired ---"
 
-# ---------------------------------------------------------
-# 3. Build JSON Payload for EMPTY IBM i
-# ---------------------------------------------------------
-# NOTE: EMPTY IBM i requires:
-#   ✔ imageID = "IBMI-EMPTY"
-#   ✔ NO storage pool fields
-#   ✔ NO disks section
-#   ✔ NO OS licensing fields
-# ---------------------------------------------------------
+# -------------------------
+# 3. Build JSON Payload
+# -------------------------
 
-JSON_PAYLOAD=$(cat <<EOF
+echo "--- Building payload for EMPTY IBM i ---"
+
+PAYLOAD=$(cat <<EOF
 {
   "serverName": "${LPAR_NAME}",
-  "processors": ${CORES},
-  "memory": ${MEM_GB},
+  "processors": ${PROCESSORS},
+  "memory": ${MEMORY_GB},
   "procType": "${PROC_TYPE}",
   "sysType": "${SYS_TYPE}",
   "imageID": "${IMAGE_ID}",
-
   "networks": [
     {
-      "networkID": "${SUBNET_ID}",
-      "ipAddress": "${PRIVATE_IP}"
+      "networkID": "${SUBNET_ID}"
     }
   ],
-
-  "keyPairName": "${SSH_KEY_NAME}"
+  "keyPairName": "${KEYPAIR_NAME}"
 }
 EOF
 )
 
-echo "--- Payload constructed ---"
-echo "$JSON_PAYLOAD" | jq .
+echo "$PAYLOAD" | jq .
 
-# ---------------------------------------------------------
-# 4. Execute the Create LPAR API
-# ---------------------------------------------------------
+# -------------------------
+# 4. Deploy LPAR
+# -------------------------
 
-CREATE_URL="${PVS_API_BASE}/v1/cloud-instances/${PVS_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
+API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=2024-02-28"
 
 echo "--- Creating EMPTY IBM i LPAR ---"
-RESPONSE=$(curl -s -X POST "$CREATE_URL" \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H "Content-Type: application/json" \
-    -d "$JSON_PAYLOAD")
+
+RESPONSE=$(curl -s -X POST "${API_URL}" \
+  -H "Authorization: Bearer ${IAM_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "${PAYLOAD}")
 
 echo "--- Response ---"
 echo "$RESPONSE" | jq .
 
-if echo "$RESPONSE" | jq -e '.pvmInstanceID' > /dev/null; then
-  echo "SUCCESS: EMPTY IBM i LPAR deployment has been submitted."
+# -------------------------
+# 5. Check Success
+# -------------------------
+
+if echo "$RESPONSE" | jq -e '.pvmInstanceID' >/dev/null 2>&1; then
+  echo "SUCCESS: EMPTY IBM i LPAR deployment submitted."
 else
   echo "ERROR deploying EMPTY IBM i:"
   exit 1
