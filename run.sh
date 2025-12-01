@@ -108,10 +108,10 @@ echo "$RESPONSE" | jq .
 # 5. Success check
 
 if echo "$RESPONSE" | jq -e '..pvmInstanceID' >/dev/null 2>&1; then
-  echo "🎉 SUCCESS: EMPTY IBM i LPAR deployment submitted."
+  echo " SUCCESS: EMPTY IBM i LPAR deployment submitted."
   # Crucial: Exit 0 to signal success to Code Engine
   exit 0 
 else
-  echo "❌ ERROR deploying EMPTY IBM i (API call failed or ID not found)"
+  echo " ERROR deploying EMPTY IBM i"
   exit 1
 fi
