@@ -43,7 +43,7 @@ IAM_TOKEN=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
   | jq -r '.access_token')
 
 if [ "$IAM_TOKEN" = "null" ] || [ -z "$IAM_TOKEN" ]; then
-  echo "❌ ERROR retrieving IAM token"
+  echo " ERROR retrieving IAM token"
   exit 1
 fi
 
