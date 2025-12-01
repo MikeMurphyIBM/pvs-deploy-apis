@@ -55,6 +55,10 @@ echo "--- Token acquired ---"
 
 echo "--- Building payload for EMPTY IBM i ---"
 
+# NOTE: The variable values below (PROCESSORS, MEMORY_GB, SUBNET_ID, etc.) 
+# must match the values defined in the previous conversation (0.25 cores, 2GB, 192.168.0.69, etc.)
+# and should be defined in your Code Engine script variables.
+
 PAYLOAD=$(cat <<EOF
 {
   "serverName": "${LPAR_NAME}",
@@ -62,12 +66,14 @@ PAYLOAD=$(cat <<EOF
   "memory": ${MEMORY_GB},
   "procType": "${PROC_TYPE}",
   "sysType": "${SYS_TYPE}",
-  "imageID": "${IMAGE_ID}",
-  "storageType": "tier1",
-  "storagePool": "General-Flash-53",
+  
+  "imageID": "${IMAGE_ID}", 
+  "deploymentType": "VMNoStorage",  
+  
   "networks": [
     {
-      "networkID": "${SUBNET_ID}"
+      "networkID": "${SUBNET_ID}",
+      "ipAddress": "192.168.0.69" 
     }
   ],
   "keyPairName": "${KEYPAIR_NAME}"
@@ -84,7 +90,7 @@ echo "$PAYLOAD" | jq .
 
 API_VERSION="2024-02-28"
 
-API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
+API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CRN}/pvm-instances?version=${API_VERSION}"
 
 echo "--- Creating EMPTY IBM i LPAR ---"
 
