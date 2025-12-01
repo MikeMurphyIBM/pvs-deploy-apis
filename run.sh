@@ -96,7 +96,7 @@ echo "--- Creating EMPTY IBM i LPAR ---"
 
 RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Authorization: Bearer ${IAM_TOKEN}" \
-  -H "CRN: ${PVS_CRN}"
+  -H "CRN: ${PVS_CRN}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}")
 
