@@ -110,6 +110,8 @@ echo "$RESPONSE" | jq .
 
 if echo "$RESPONSE" | jq -e '.pvmInstanceID' >/dev/null 2>&1; then
   echo "🎉 SUCCESS: EMPTY IBM i LPAR deployment submitted."
+  #crucial:  exit 0 to signla success to Code Engine
+  exit 0
 else
   echo "❌ ERROR deploying EMPTY IBM i"
   exit 1
