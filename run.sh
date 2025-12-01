@@ -90,13 +90,12 @@ echo "$PAYLOAD" | jq .
 
 API_VERSION="2024-02-28"
 
-API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CRN}/pvm-instances?version=${API_VERSION}"
+API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
 
 echo "--- Creating EMPTY IBM i LPAR ---"
 
 RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Authorization: Bearer ${IAM_TOKEN}" \
-  -H "CRN: ${PVS_CRN}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}")
 
