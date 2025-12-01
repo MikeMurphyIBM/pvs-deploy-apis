@@ -107,7 +107,7 @@ echo "$RESPONSE" | jq .
 # -------------------------
 # 5. Success check
 
-# 5a. Extract the PVM Instance ID from the API Response (The RESPONSE variable contains the JSON array)
+# 5a. Extract the PVM Instance ID from the API Response 
 PVM_INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.[].pvmInstanceID' 2>/dev/null)
 
 if [ -z "$PVM_INSTANCE_ID" ] || [ "$PVM_INSTANCE_ID" == "null" ]; then
@@ -118,50 +118,40 @@ fi
 echo " SUCCESS: EMPTY IBM i LPAR deployment submitted. Instance ID: $PVM_INSTANCE_ID"
 
 # 5b. Define Polling Loop Parameters
-# MAX_WAIT_SECONDS is set to 600 seconds (10 minutes) as requested.
 MAX_WAIT_SECONDS=600  
 POLL_INTERVAL=30       
 ELAPSED_TIME=0
 
-# 5c. Polling Loop: Wait for status to become "SHUTOFF"
 echo " --- Starting PVS instance polling loop. Waiting for SHUTOFF status... ---"
 
 while [ $ELAPSED_TIME -lt $MAX_WAIT_SECONDS ]; do
+  # Retrieve the current instance details using the PowerVS CLI. 
+  # NOTE: ibmcloud is now available due to Dockerfile fix.
+  INSTANCE_DETAILS=$(ibmcloud pi instance get "$PVM_INSTANCE_ID" --json 2>/dev/null)
   
-  # Retrieve the current instance details using the PowerVS CLI
-  # IMPORTANT: Removed 2>/dev/null to capture command execution errors for debugging
-  INSTANCE_DETAILS=$(ibmcloud pi instance get "$PVM_INSTANCE_ID" --json)
-  
-  # DEBUG LINE: Output the raw JSON received from PVS to diagnose errors
-  echo "DEBUG: Raw PVS Output: $INSTANCE_DETAILS" 
-
-  # CORRECTION 1: Changed jq filter from '.[].status' to '.status' (assuming single object return for instance get)
-  # Suppress errors from jq output only, allowing PVS CLI errors to show above.
+  # Attempt extraction assuming single JSON object (.status)
   RAW_STATUS=$(echo "$INSTANCE_DETAILS" | jq -r '.status' 2>/dev/null)
+  
+  # Fallback check for array output (less common for 'get', but handles API variations)
+  if [ -z "$RAW_STATUS" ]; then
+      RAW_STATUS=$(echo "$INSTANCE_DETAILS" | jq -r '.[].status' 2>/dev/null)
+  fi
 
-  # Check if retrieval/extraction failed (status is empty)
+  # Check if retrieval failed entirely (e.g., transient network failure or token expiry)
   if [ -z "$RAW_STATUS" ]; then
       echo " WARNING: Could not retrieve status for instance $PVM_INSTANCE_ID. Retrying in $POLL_INTERVAL seconds..."
-      
-      # If INSTANCE_DETAILS was also empty, the 'ibmcloud pi' command failed. If INSTANCE_DETAILS had output, 'jq' failed.
-      if [ -z "$INSTANCE_DETAILS" ]; then
-          echo " DEBUG: PVS CLI command failed or returned empty output."
-      else
-          echo " DEBUG: PVS JSON parsing failed (Check if '.status' is the correct path)."
-      fi
-
       sleep $POLL_INTERVAL
       ELAPSED_TIME=$((ELAPSED_TIME + $POLL_INTERVAL))
       continue
   fi
 
-  # CORRECTION 2: Normalize status to uppercase for reliable comparison (SHUTOFF vs Shutoff)
+  # Normalize status to uppercase for reliable comparison
   CURRENT_STATUS_UPPER=$(echo "$RAW_STATUS" | tr '[:lower:]' '[:upper:]')
   
-  # Check for successful, powered-off state
+  # Check for successful, stable state (SHUTOFF is the expected end state for VMNoStorage)
   if [ "$CURRENT_STATUS_UPPER" == "SHUTOFF" ] || [ "$CURRENT_STATUS_UPPER" == "STOPPED" ]; then
-    echo " SUCCESS: Empty PVS instance $PVM_INSTANCE_ID successfully provisioned and is in SHUTOFF state."
-    # CRUCIAL: Exit 0 to signal definitive success to Code Engine (Job mode: task requires exit 0) [1, 2]
+    echo " SUCCESS: PVS instance $PVM_INSTANCE_ID successfully provisioned and is in SHUTOFF state."
+    # Exit 0 ensures Code Engine job reports success [7]
     exit 0
   fi
 
@@ -171,7 +161,7 @@ while [ $ELAPSED_TIME -lt $MAX_WAIT_SECONDS ]; do
     exit 1
   fi
 
-  # Report current status (e.g., BUILDING) and wait
+  # Still provisioning (e.g., BUILDING)
   echo " Status is $CURRENT_STATUS_UPPER ($ELAPSED_TIME seconds elapsed). Waiting $POLL_INTERVAL seconds..."
   sleep $POLL_INTERVAL
   ELAPSED_TIME=$((ELAPSED_TIME + $POLL_INTERVAL))
