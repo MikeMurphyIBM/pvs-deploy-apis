@@ -56,9 +56,6 @@ echo "--- Token acquired ---"
 
 echo "--- Building payload for EMPTY IBM i ---"
 
-# NOTE: The variable values below (PROCESSORS, MEMORY_GB, SUBNET_ID, etc.) 
-# must match the values defined in the previous conversation (0.25 cores, 2GB, 192.168.0.69, etc.)
-# and should be defined in your Code Engine script variables.
 
 PAYLOAD=$(cat <<EOF
 {
@@ -123,7 +120,7 @@ echo " SUCCESS: EMPTY IBM i LPAR deployment submitted. Instance ID: $PVM_INSTANC
 # 1. Log in using the API Key
 # If using an API key (recommended for automated jobs), the login command should be non-interactive:
 echo "Attempting IBM Cloud login..."
-# Logging in using the API Key (This creates a login session [10-13])
+# Logging in using the API Key (This creates a login session )
 ibmcloud login --apikey "$API_KEY" -r "$REGION" -g "$RESOURCE_GROUP"
 
 # Check if login succeeded (optional but recommended)
@@ -134,8 +131,8 @@ fi
 
 # 2. Target the PVS Service Workspace (Crucial for pi commands)
 echo "Targeting PVS workspace: $PVS_CRN"
-# The PowerVS workspace must be explicitly targeted to run instance commands [14]
-# The command to target the service workspace is ibmcloud pi ws tg <CRN> [15-17]
+# The PowerVS workspace must be explicitly targeted to run instance commands
+# The command to target the service workspace is ibmcloud pi ws tg <CRN> 
 ibmcloud pi ws tg "$PVS_CRN"
 
 # Check if targeting succeeded (optional but recommended)
@@ -160,8 +157,6 @@ while [ $ELAPSED_TIME -lt $MAX_WAIT_SECONDS ]; do
   ibmcloud pi ws context 
   
   # Retrieve the current instance details using the PowerVS CLI
-  # IMPORTANT: We are now explicitly capturing STDERR (2>&1) into the variable 
-  # and NOT suppressing output, so authentication errors will be captured in INSTANCE_DETAILS.
   INSTANCE_DETAILS=$(ibmcloud pi instance get "$PVM_INSTANCE_ID" --json 2>&1)
   
   # DEBUG LINE: Output the raw PVS result to diagnose CLI failure or authentication issue
