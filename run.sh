@@ -79,6 +79,8 @@ echo "$PAYLOAD" | jq .
 # 4. Make API Call
 # -------------------------
 
+API_VERSION="2024-02-28"
+
 API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
 
 echo "--- Creating EMPTY IBM i LPAR ---"
@@ -88,6 +90,7 @@ RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Hmc-CRN: ${PVS_CRN}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}")
+
 
 echo "--- Response ---"
 echo "$RESPONSE" | jq .
