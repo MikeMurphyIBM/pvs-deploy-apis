@@ -133,10 +133,10 @@ if [ $? -ne 0 ]; then
 fi
 
 # 2. Target the PVS Service Workspace (Crucial for pi commands)
-echo "Targeting PVS workspace: $PVS_WORKSPACE_CRN"
+echo "Targeting PVS workspace: $PVS_CRN"
 # The PowerVS workspace must be explicitly targeted to run instance commands [14]
 # The command to target the service workspace is ibmcloud pi ws tg <CRN> [15-17]
-ibmcloud pi ws tg "$PVS_WORKSPACE_CRN"
+ibmcloud pi ws tg "$PVS_CRN"
 
 # Check if targeting succeeded (optional but recommended)
 if [ $? -ne 0 ]; then
