@@ -63,6 +63,8 @@ PAYLOAD=$(cat <<EOF
   "procType": "${PROC_TYPE}",
   "sysType": "${SYS_TYPE}",
   "imageID": "${IMAGE_ID}",
+  "storageType": "tier1",
+  "storagePool": "General-Flash-53",
   "networks": [
     {
       "networkID": "${SUBNET_ID}"
@@ -72,6 +74,7 @@ PAYLOAD=$(cat <<EOF
 }
 EOF
 )
+
 
 echo "$PAYLOAD" | jq .
 
