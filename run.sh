@@ -107,11 +107,46 @@ echo "$RESPONSE" | jq .
 # -------------------------
 # 5. Success check
 
-if echo "$RESPONSE" | jq -e '..pvmInstanceID' >/dev/null 2>&1; then
-  echo " SUCCESS: EMPTY IBM i LPAR deployment submitted."
-  # Crucial: Exit 0 to signal success to Code Engine
-  exit 0 
-else
-  echo " ERROR deploying EMPTY IBM i"
+# 5a. Extract the PVM Instance ID from the API Response (The RESPONSE variable contains the JSON array)
+PVM_INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.[].pvmInstanceID' 2>/dev/null)
+
+if [ -z "$PVM_INSTANCE_ID" ] || [ "$PVM_INSTANCE_ID" == "null" ]; then
+  echo " ERROR deploying EMPTY IBM i: PVM Instance ID could not be retrieved from the response."
   exit 1
 fi
+
+echo " SUCCESS: EMPTY IBM i LPAR deployment submitted. Instance ID: $PVM_INSTANCE_ID"
+
+# 5b. Define Polling Loop Parameters
+MAX_WAIT_SECONDS=600  # Example: 30 minutes (Adjust based on expected PVS provisioning time)
+POLL_INTERVAL=30       # Check every 30 seconds
+ELAPSED_TIME=0
+
+# 5c. Polling Loop: Wait for status to become "ACTIVE"
+echo " --- Starting PVS instance polling loop. Waiting for ACTIVE status... ---"
+
+while [ $ELAPSED_TIME -lt $MAX_WAIT_SECONDS ]; do
+  # Retrieve the current instance details using the PowerVS CLI
+  # The output of ibmcloud pi instance get includes the status field
+  INSTANCE_DETAILS=$(ibmcloud pi instance get "$PVM_INSTANCE_ID" --json 2>/dev/null)
+  CURRENT_STATUS=$(echo "$INSTANCE_DETAILS" | jq -r '.[].status' 2>/dev/null)
+
+  if [ "$CURRENT_STATUS" == "ACTIVE" ]; then
+    echo " SUCCESS: PVS instance $PVM_INSTANCE_ID is ACTIVE and ready."
+    # CRUCIAL: Exit 0 to signal definitive success to Code Engine
+    exit 0
+  fi
+
+  if [ "$CURRENT_STATUS" == "ERROR" ] || [ "$CURRENT_STATUS" == "FAILED" ]; then
+    echo " ERROR: PVS instance $PVM_INSTANCE_ID reported status $CURRENT_STATUS. Deployment failed."
+    exit 1
+  fi
+
+  echo " Status is $CURRENT_STATUS ($ELAPSED_TIME seconds elapsed). Waiting $POLL_INTERVAL seconds..."
+  sleep $POLL_INTERVAL
+  ELAPSED_TIME=$((ELAPSED_TIME + $POLL_INTERVAL))
+done
+
+# 5d. Timeout Failure
+echo " ERROR: PVS instance polling timed out after $MAX_WAIT_SECONDS seconds. Deployment status is still $CURRENT_STATUS."
+exit 1
