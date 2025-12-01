@@ -123,7 +123,7 @@ POLL_INTERVAL=30       # Check every 30 seconds
 ELAPSED_TIME=0
 
 # 5c. Polling Loop: Wait for status to become "ACTIVE"
-echo " --- Starting PVS instance polling loop. Waiting for ACTIVE status... ---"
+echo " --- Starting PVS instance polling loop. Waiting for SHUTOFF status... ---"
 
 while [ $ELAPSED_TIME -lt $MAX_WAIT_SECONDS ]; do
   # Retrieve the current instance details using the PowerVS CLI
@@ -131,7 +131,7 @@ while [ $ELAPSED_TIME -lt $MAX_WAIT_SECONDS ]; do
   INSTANCE_DETAILS=$(ibmcloud pi instance get "$PVM_INSTANCE_ID" --json 2>/dev/null)
   CURRENT_STATUS=$(echo "$INSTANCE_DETAILS" | jq -r '.[].status' 2>/dev/null)
 
-  if [ "$CURRENT_STATUS" == "ACTIVE" ]; then
+  if [ "$CURRENT_STATUS" == "SHUTOFF" ]; then
     echo " SUCCESS: PVS instance $PVM_INSTANCE_ID is ACTIVE and ready."
     # CRUCIAL: Exit 0 to signal definitive success to Code Engine
     exit 0
