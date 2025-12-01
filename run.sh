@@ -124,7 +124,7 @@ echo " SUCCESS: EMPTY IBM i LPAR deployment submitted. Instance ID: $PVM_INSTANC
 # If using an API key (recommended for automated jobs), the login command should be non-interactive:
 echo "Attempting IBM Cloud login..."
 # Logging in using the API Key (This creates a login session [10-13])
-ibmcloud login --apikey "$IAM_API_KEY" -r "$REGION" -g "$RESOURCE_GROUP"
+ibmcloud login --apikey "$API_KEY" -r "$REGION" -g "$RESOURCE_GROUP"
 
 # Check if login succeeded (optional but recommended)
 if [ $? -ne 0 ]; then
