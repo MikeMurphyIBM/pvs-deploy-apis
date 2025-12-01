@@ -1,12 +1,15 @@
-# Use a small base image with curl + jq
+# Use Alpine Linux (small base image)
 FROM alpine:3.19
 
 # Install required tools
-RUN apk add --no-cache curl jq
+RUN apk add --no-cache bash curl jq
 
-# Copy your run script into the container
+# Copy your script
 COPY run.sh /run.sh
-RUN chmod +x /run.sh
 
-# Run script by default
+# Ensure Unix line endings + executable flag
+RUN sed -i 's/\r$//' /run.sh && chmod +x /run.sh
+
+# Default command
 CMD ["/run.sh"]
+
