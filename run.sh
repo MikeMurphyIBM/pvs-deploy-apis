@@ -12,6 +12,7 @@ API_KEY="${IBMCLOUD_API_KEY}"   # Provided via Code Engine secret
 PVS_CRN="crn:v1:bluemix:public:power-iaas:dal10:a/21d74dd4fe814dfca20570bbb93cdbff:cc84ef2f-babc-439f-8594-571ecfcbe57a::"
 
 # PowerVS identifiers
+RESOURCE_GROUP="Default"
 REGION="us-south"
 ZONE="dal10"
 CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
@@ -116,6 +117,32 @@ if [ -z "$PVM_INSTANCE_ID" ] || [ "$PVM_INSTANCE_ID" == "null" ]; then
 fi
 
 echo " SUCCESS: EMPTY IBM i LPAR deployment submitted. Instance ID: $PVM_INSTANCE_ID"
+
+# --- NEW: IBM Cloud Authentication and Targeting ---
+
+# 1. Log in using the API Key
+# If using an API key (recommended for automated jobs), the login command should be non-interactive:
+echo "Attempting IBM Cloud login..."
+# Logging in using the API Key (This creates a login session [10-13])
+ibmcloud login --apikey "$IAM_API_KEY" -r "$REGION" -g "$RESOURCE_GROUP"
+
+# Check if login succeeded (optional but recommended)
+if [ $? -ne 0 ]; then
+    echo "FATAL ERROR: IBM Cloud login failed. Cannot proceed with PVS interaction."
+    exit 1
+fi
+
+# 2. Target the PVS Service Workspace (Crucial for pi commands)
+echo "Targeting PVS workspace: $PVS_WORKSPACE_CRN"
+# The PowerVS workspace must be explicitly targeted to run instance commands [14]
+# The command to target the service workspace is ibmcloud pi ws tg <CRN> [15-17]
+ibmcloud pi ws tg "$PVS_WORKSPACE_CRN"
+
+# Check if targeting succeeded (optional but recommended)
+if [ $? -ne 0 ]; then
+    echo "FATAL ERROR: Failed to target PowerVS workspace. Check CRN or region."
+    exit 1
+fi
 
 # 5b. Define Polling Loop Parameters
 MAX_WAIT_SECONDS=600  
