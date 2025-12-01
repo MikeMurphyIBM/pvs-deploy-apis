@@ -8,45 +8,49 @@ echo "=== EMPTY IBM i Deployment Script ==="
 
 API_KEY="${IBMCLOUD_API_KEY}"   # Provided via Code Engine secret
 
+# Full PowerVS CRN (MUST be used in the request header)
 PVS_CRN="crn:v1:bluemix:public:power-iaas:dal10:a/21d74dd4fe814dfca20570bbb93cdbff:cc84ef2f-babc-439f-8594-571ecfcbe57a::"
 
-
-# PowerVS Information
+# PowerVS identifiers
 REGION="us-south"
 ZONE="dal10"
-CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"   # Extracted correctly from CRN
+CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
+
 SUBNET_ID="ca78b0d5-f77f-4e8c-9f2c-545ca20ff073"
 KEYPAIR_NAME="murphy-clone-key"
 
-# LPAR Settings
+# EMPTY IBM i settings
 LPAR_NAME="empty-ibmi-lpar"
 MEMORY_GB=2
 PROCESSORS=0.25
 PROC_TYPE="shared"
 SYS_TYPE="s1022"
 
-# EMPTY IBM i identifier (SPECIAL)
+# Special system image token
 IMAGE_ID="IBMI-EMPTY"
 
+API_VERSION="2024-02-28"
+
 # -------------------------
-# 2. Get IAM Token
+# 2. IAM Token
 # -------------------------
 
 echo "--- Requesting IAM access token ---"
 
 IAM_TOKEN=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${API_KEY}" | jq -r '.access_token')
+  -d "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${API_KEY}" \
+  | jq -r '.access_token')
 
 if [ "$IAM_TOKEN" = "null" ] || [ -z "$IAM_TOKEN" ]; then
-  echo "ERROR retrieving IAM token"
+  echo "❌ ERROR retrieving IAM token"
   exit 1
 fi
 
 echo "--- Token acquired ---"
 
 # -------------------------
-# 3. Build JSON Payload
+# 3. Build Payload
 # -------------------------
 
 echo "--- Building payload for EMPTY IBM i ---"
@@ -72,15 +76,16 @@ EOF
 echo "$PAYLOAD" | jq .
 
 # -------------------------
-# 4. Deploy LPAR
+# 4. Make API Call
 # -------------------------
 
-API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=2024-02-28"
+API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
 
 echo "--- Creating EMPTY IBM i LPAR ---"
 
 RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Authorization: Bearer ${IAM_TOKEN}" \
+  -H "Hmc-CRN: ${PVS_CRN}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}")
 
@@ -88,12 +93,12 @@ echo "--- Response ---"
 echo "$RESPONSE" | jq .
 
 # -------------------------
-# 5. Check Success
+# 5. Success check
 # -------------------------
 
 if echo "$RESPONSE" | jq -e '.pvmInstanceID' >/dev/null 2>&1; then
-  echo "SUCCESS: EMPTY IBM i LPAR deployment submitted."
+  echo "🎉 SUCCESS: EMPTY IBM i LPAR deployment submitted."
 else
-  echo "ERROR deploying EMPTY IBM i:"
+  echo "❌ ERROR deploying EMPTY IBM i"
   exit 1
 fi
