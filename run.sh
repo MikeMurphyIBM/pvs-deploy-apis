@@ -8,6 +8,9 @@ echo "=== EMPTY IBM i Deployment Script ==="
 
 API_KEY="${IBMCLOUD_API_KEY}"   # Provided via Code Engine secret
 
+PVS_CRN="crn:v1:bluemix:public:power-iaas:dal10:a/21d74dd4fe814dfca20570bbb93cdbff:cc84ef2f-babc-439f-8594-571ecfcbe57a::"
+
+
 # PowerVS Information
 REGION="us-south"
 ZONE="dal10"
