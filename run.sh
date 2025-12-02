@@ -8,13 +8,15 @@ echo "=== EMPTY IBM i Deployment Script ==="
 
 API_KEY="${IBMCLOUD_API_KEY}"   # Provided via Code Engine secret
 
-# Full PowerVS CRN (MUST be used in the request header)
+# Full PowerVS Workspace CRN (MUST be used in the request header)
 PVS_CRN="crn:v1:bluemix:public:power-iaas:dal10:a/21d74dd4fe814dfca20570bbb93cdbff:cc84ef2f-babc-439f-8594-571ecfcbe57a::"
 
 # PowerVS identifiers
 RESOURCE_GROUP="Default"
 REGION="us-south"
 ZONE="dal10"
+
+#PowerVS Workspace ID
 CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
 
 SUBNET_ID="ca78b0d5-f77f-4e8c-9f2c-545ca20ff073"
@@ -115,10 +117,10 @@ fi
 
 echo " SUCCESS: EMPTY IBM i LPAR deployment submitted. Instance ID: $PVM_INSTANCE_ID"
 
-# --- NEW: IBM Cloud Authentication and Targeting ---
+# --IBM Cloud Authentication and Targeting ---
 
 # 1. Log in using the API Key
-# If using an API key (recommended for automated jobs), the login command should be non-interactive:
+# If using an API key, the login command should be non-interactive:
 echo "Attempting IBM Cloud login..."
 # Logging in using the API Key (This creates a login session )
 ibmcloud login --apikey "$API_KEY" -r "$REGION" -g "$RESOURCE_GROUP"
@@ -141,13 +143,13 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 5b. Define Polling Loop Parameters
+# 3. Define Polling Loop Parameters
 MAX_WAIT_SECONDS=600  
 POLL_INTERVAL=30       
 ELAPSED_TIME=0
 
 # --- CRITICAL DIAGNOSTIC STEP ---
-# 5c. Polling Loop: Wait for status to become "SHUTOFF"
+# 3b. Polling Loop: Wait for status to become "SHUTOFF"
 echo " --- Starting PVS instance polling loop. Waiting for SHUTOFF status... ---"
 
 while [ $ELAPSED_TIME -lt $MAX_WAIT_SECONDS ]; do
@@ -210,6 +212,6 @@ while [ $ELAPSED_TIME -lt $MAX_WAIT_SECONDS ]; do
   ELAPSED_TIME=$((ELAPSED_TIME + $POLL_INTERVAL))
 done
 
-# 5d. Timeout Failure
+# 3c. Timeout Failure
 echo " ERROR: PVS instance polling timed out after $MAX_WAIT_SECONDS seconds. Deployment status is still $CURRENT_STATUS_UPPER."
 exit 1
