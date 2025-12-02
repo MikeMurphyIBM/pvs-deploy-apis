@@ -16,13 +16,13 @@ RESOURCE_GROUP="Default"
 REGION="us-south"
 ZONE="dal10"
 
-#PowerVS Workspace ID
+# PowerVS Workspace ID
 CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
 
 SUBNET_ID="ca78b0d5-f77f-4e8c-9f2c-545ca20ff073"
 KEYPAIR_NAME="murphy-clone-key"
 
-# EMPTY IBM i settings
+# EMPTY IBMi settings
 LPAR_NAME="empty-ibmi-lpar"
 MEMORY_GB=2
 PROCESSORS=0.25
@@ -117,9 +117,9 @@ fi
 
 echo " SUCCESS: EMPTY IBM i LPAR deployment submitted. Instance ID: $PVM_INSTANCE_ID"
 
-# --IBM Cloud Authentication and Targeting ---
+# 5b. IBM Cloud Authentication and Targeting 
 
-# 1. Log in using the API Key
+# Log in using the API Key
 # If using an API key, the login command should be non-interactive:
 echo "Attempting IBM Cloud login..."
 # Logging in using the API Key (This creates a login session )
@@ -131,7 +131,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 2. Target the PVS Service Workspace (Crucial for pi commands)
+# Target the PVS Service Workspace (Crucial for pi commands)
 echo "Targeting PVS workspace: $PVS_CRN"
 # The PowerVS workspace must be explicitly targeted to run instance commands
 # The command to target the service workspace is ibmcloud pi ws tg <CRN> 
@@ -143,13 +143,13 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 3. Define Polling Loop Parameters
+# 5c. Define Polling Loop Parameters
 MAX_WAIT_SECONDS=600  
 POLL_INTERVAL=30       
 ELAPSED_TIME=0
 
 # --- CRITICAL DIAGNOSTIC STEP ---
-# 3b. Polling Loop: Wait for status to become "SHUTOFF"
+# 5d. Polling Loop: Wait for status to become "SHUTOFF"
 echo " --- Starting PVS instance polling loop. Waiting for SHUTOFF status... ---"
 
 while [ $ELAPSED_TIME -lt $MAX_WAIT_SECONDS ]; do
@@ -212,6 +212,6 @@ while [ $ELAPSED_TIME -lt $MAX_WAIT_SECONDS ]; do
   ELAPSED_TIME=$((ELAPSED_TIME + $POLL_INTERVAL))
 done
 
-# 3c. Timeout Failure
+# 5e. Timeout Failure
 echo " ERROR: PVS instance polling timed out after $MAX_WAIT_SECONDS seconds. Deployment status is still $CURRENT_STATUS_UPPER."
 exit 1
