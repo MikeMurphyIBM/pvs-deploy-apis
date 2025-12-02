@@ -7,12 +7,12 @@ FROM alpine:3.19
 RUN apk update && \
     apk add --no-cache bash curl jq openssl py3-pip python3
 
-# --- NEW FEATURE 1: Install Core IBM Cloud CLI ---
-# The core IBM Cloud CLI is necessary for the 'ibmcloud' prefix [1].
+# ---Install Core IBM Cloud CLI ---
+# The core IBM Cloud CLI is necessary for the 'ibmcloud' prefix 
 RUN curl -fsSL https://clis.cloud.ibm.com/install/linux | bash
 
-# --- NEW FEATURE 2: Install Power Virtual Server Plug-in ---
-# The 'power-iaas' plugin is required to use 'ibmcloud pi' commands like 'instance get' [2, 3].
+# ---Install Power Virtual Server Plug-in ---
+# The 'power-iaas' plugin is required to use 'ibmcloud pi' commands like 'instance get'
 RUN ibmcloud plugin install power-iaas -f
 
 # Copy your script
