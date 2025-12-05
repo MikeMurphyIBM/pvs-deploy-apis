@@ -58,6 +58,7 @@ echo "--- Token acquired ---"
 
 echo "--- Building payload for EMPTY IBM i ---"
 
+set +x  # Disable tracing
 
 PAYLOAD=$(cat <<EOF
 {
@@ -80,7 +81,7 @@ PAYLOAD=$(cat <<EOF
 }
 EOF
 )
-
+set -x
 
 echo "$PAYLOAD" | jq .
 
