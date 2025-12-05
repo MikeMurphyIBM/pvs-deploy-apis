@@ -106,6 +106,7 @@ echo "$RESPONSE" | jq .
 
 # -------------------------
 # 5. Success check
+# -------------------------
 
 # 5a. Extract the PVM Instance ID (Retained from previous successful extraction)
 PVM_INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.[].pvmInstanceID' 2>/dev/null)
@@ -131,13 +132,13 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Target the PVS Service Workspace (Crucial for pi commands)
+# Target the PVS Service Workspace
 echo "Targeting PVS workspace: $PVS_CRN"
 # The PowerVS workspace must be explicitly targeted to run instance commands
 # The command to target the service workspace is ibmcloud pi ws tg <CRN> 
 ibmcloud pi ws tg "$PVS_CRN"
 
-# Check if targeting succeeded (optional but recommended)
+# Check if targeting succeeded 
 if [ $? -ne 0 ]; then
     echo "FATAL ERROR: Failed to target PowerVS workspace. Check CRN or region."
     exit 1
