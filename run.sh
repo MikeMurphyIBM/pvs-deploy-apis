@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # Configuration: Exit immediately if a command exits with a non-zero status (-e)
 # and exit on unbound variables (-u).
 set -eu
@@ -24,8 +25,8 @@ MEMORY_GB=2
 PROCESSORS=0.25
 PROC_TYPE="shared"
 SYS_TYPE="s1022"
-IMAGE_ID="IBMI-EMPTY"             # Corrected Image ID to deploy without boot volume [4, 5]
-DEPLOYMENT_TYPE="VMNoStorage"    # Critical correction: Instructs the system to deploy without initial storage [3, 5, 6]
+IMAGE_ID="IBMI-EMPTY"             # Corrected Image ID to deploy without boot volume
+DEPLOYMENT_TYPE="VMNoStorage"    # Critical correction: Instructs the system to deploy without initial storage
 
 API_VERSION="2024-02-28"
 
@@ -99,11 +100,12 @@ echo "SUCCESS: Logged in and targeted region/resource group."
 
 CURRENT_STEP="TARGET_PVS_WORKSPACE"
 echo "STEP: Targeting Power Virtual Server workspace: ${PVS_CRN}..."
+# The output is generally minimal for this command unless context is already set
 ibmcloud pi ws target "${PVS_CRN}"
 echo "SUCCESS: PVS workspace targeted."
 
 # -----------------------------------------------------------
-# 3. Create EMPTY IBM i LPAR (VMNoStorage)
+# 3. Create EMPTY IBM i LPAR
 # -----------------------------------------------------------
 
 CURRENT_STEP="CREATE_LPAR"
@@ -118,13 +120,22 @@ RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}")
 
-# Extract Instance ID from the API response
+# Attempt to extract Instance ID from the API response
+# If the call failed, this extraction will likely result in the string "null"
 INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.pvmInstanceID // .pvmInstance.pvmInstanceID')
 
 if [[ "$INSTANCE_ID" == "null" || -z "$INSTANCE_ID" ]]; then
     echo "FAILURE: LPAR creation API call failed."
     echo "API Response (Failure Details):"
-    echo "$RESPONSE" | jq .
+    
+    # Attempt to use jq for pretty-printing the error response. If jq fails (e.g., input is malformed or an array), it prints nothing, so we check if RESPONSE is empty.
+    if echo "$RESPONSE" | jq . 2>/dev/null; then
+        # jq succeeded (meaning the response was parsable JSON)
+        : 
+    else
+        # jq failed (meaning the response was non-JSON or badly structured). Print raw response.
+        echo "$RESPONSE"
+    fi
     exit 1
 fi
 
@@ -158,8 +169,7 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
 
     echo "CHECK: Attempt ${POLL_ATTEMPTS} / ${STATUS_POLL_LIMIT}. Checking status for ${LPAR_NAME}..."
 
-    # Use 'ibmcloud pi ins get' to retrieve status (Suppress stderr for failed command runs during temporary outages)
-    # The image name used here is one of the supported stock images [7].
+    # Use 'ibmcloud pi ins get' with JSON output (Suppress stderr for failed command runs)
     STATUS_JSON=$(ibmcloud pi ins get "${LPAR_NAME}" --json 2>/dev/null)
     EXIT_CODE=$?
 
@@ -170,7 +180,7 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
         continue
     fi
 
-    # Extract status and reset failure counter
+    # Try to extract status and reset consecutive failure counter
     STATUS=$(echo "$STATUS_JSON" | jq -r '.status')
     RETRY_FAILURES=0 # Reset failure count on successful command execution
 
