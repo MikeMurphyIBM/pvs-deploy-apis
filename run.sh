@@ -25,8 +25,8 @@ MEMORY_GB=2
 PROCESSORS=0.25
 PROC_TYPE="shared"
 SYS_TYPE="s1022"
-IMAGE_ID="IBMI-EMPTY"
-DEPLOYMENT_TYPE="VMNoStorage" # Critical: Deploy without initial storage
+IMAGE_ID="IBMI-EMPTY"             # Corrected Image ID to deploy without boot volume
+DEPLOYMENT_TYPE="VMNoStorage"    # Critical correction: Instructs the system to deploy without initial storage
 
 API_VERSION="2024-02-28"
 
@@ -48,7 +48,7 @@ trap 'if [[ $? -ne 0 ]]; then echo "FAILURE: Script failed at step $CURRENT_STEP
 # --- IMPORTANT: Disable verbose shell tracing globally for clean output ---
 set +x
 
-# JSON Payload Definition
+# JSON Payload Definition (Includes the corrected image and deployment type)
 PAYLOAD=$(cat <<EOF
 {
     "serverName": "${LPAR_NAME}",
@@ -57,7 +57,7 @@ PAYLOAD=$(cat <<EOF
     "procType": "${PROC_TYPE}",
     "sysType": "${SYS_TYPE}",
     "imageID": "${IMAGE_ID}",
-    "deploymentType": "${DEPLOYMENT_TYPE}",
+    "deploymentType": "${DEPLOYMENT_TYPE}", 
     "keyPairName": "${KEYPAIR_NAME}",
     "networks": [
         {
@@ -104,7 +104,7 @@ ibmcloud pi ws target "${PVS_CRN}"
 echo "SUCCESS: PVS workspace targeted."
 
 # -----------------------------------------------------------
-# 3. Create EMPTY IBM i LPAR
+# 3. Create EMPTY IBM i LPAR (VMNoStorage)
 # -----------------------------------------------------------
 
 CURRENT_STEP="CREATE_LPAR"
@@ -119,17 +119,13 @@ RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}")
 
-# --- CRITICAL FIX: Attempt to extract Instance ID using multiple potential paths ---
-# We use the '//' operator to try the array iteration (.[].pvmInstanceID) followed by
-# standard object paths, suppressing errors until the check below.
-
+# Attempt to extract Instance ID from the API response using multiple paths
 INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.[].pvmInstanceID // .pvmInstanceID // .pvmInstance.pvmInstanceID' 2>/dev/null)
 
 if [[ "$INSTANCE_ID" == "null" || -z "$INSTANCE_ID" ]]; then
     echo "FAILURE: LPAR creation API call failed."
     echo "API Response (Failure Details):"
     
-    # Attempt to use jq for pretty-printing the error response. If jq fails, print raw response.
     if echo "$RESPONSE" | jq . 2>/dev/null; then
         : 
     else
@@ -137,7 +133,6 @@ if [[ "$INSTANCE_ID" == "null" || -z "$INSTANCE_ID" ]]; then
         echo "$RESPONSE"
         echo "----------------------------------------------------"
     fi
-    # Re-enable error trace immediately before exit to capture full context if debugging the failure
     exit 1
 fi
 
@@ -171,9 +166,13 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
 
     echo "CHECK: Attempt ${POLL_ATTEMPTS} / ${STATUS_POLL_LIMIT}. Checking status for ${LPAR_NAME}..."
 
-    # Use 'ibmcloud pi ins get' to retrieve status (Suppress stderr for failed command runs during temporary outages)
+    # CRITICAL FIX: Temporarily disable strict error checking (set -e) around the command
+    # that might fail due to transient network/timing issues, allowing the script
+    # to capture the exit code ($?) and execute the retry logic below.
+    set +e
     STATUS_JSON=$(ibmcloud pi ins get "${LPAR_NAME}" --json 2>/dev/null)
     EXIT_CODE=$?
+    set -e
 
     if [[ $EXIT_CODE -ne 0 ]]; then
         RETRY_FAILURES=$((RETRY_FAILURES + 1))
@@ -182,7 +181,7 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
         continue
     fi
 
-    # Try to extract status and reset consecutive failure counter
+    # Extract status and reset failure counter
     STATUS=$(echo "$STATUS_JSON" | jq -r '.status')
     RETRY_FAILURES=0 # Reset failure count on successful command execution
 
@@ -190,7 +189,7 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
         echo "SUCCESS: LPAR transitioned to desired state: ${STATUS}"
         break
     elif [[ "$STATUS" == "BUILDING" || "$STATUS" == "PENDING" ]]; then
-        echo "INFO: LPAR status is '${STATUS}'. Provisioning in progress. Waiting ${POLL_INTERVAL} seconds..."
+        echo "INFO: LPAR status is '${STATUS}'. Provisioning without a boot volume should be faster, but initialization may take time. Waiting ${POLL_INTERVAL} seconds..."
     elif [[ "$STATUS" == "ACTIVE" ]]; then
         echo "INFO: LPAR status is '${STATUS}'. Waiting ${POLL_INTERVAL} seconds for transition to SHUTOFF..."
     else
