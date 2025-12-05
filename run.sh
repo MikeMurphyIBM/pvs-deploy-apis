@@ -25,8 +25,8 @@ MEMORY_GB=2
 PROCESSORS=0.25
 PROC_TYPE="shared"
 SYS_TYPE="s1022"
-IMAGE_ID="IBMI-EMPTY"             # Corrected Image ID to deploy without boot volume
-DEPLOYMENT_TYPE="VMNoStorage"    # Critical correction: Instructs the system to deploy without initial storage
+IMAGE_ID="IBMI-EMPTY"            
+DEPLOYMENT_TYPE="VMNoStorage"   
 
 API_VERSION="2024-02-28"
 
@@ -36,7 +36,7 @@ POLL_INTERVAL=30
 INITIAL_WAIT=120
 IAM_TOKEN=""
 INSTANCE_ID=""
-STATUS_POLL_LIMIT=12 # 6 minutes maximum polling time
+STATUS_POLL_LIMIT=12 
 
 # -----------------------------------------------------------
 # 1. Utility Functions and Cleanup
@@ -76,7 +76,7 @@ EOF
 CURRENT_STEP="AUTH_TOKEN_RETRIEVAL"
 echo "STEP: Retrieving IAM access token..."
 
-# Retrieve IAM token (Sensitive operation hidden by set +x)
+# Retrieve IAM token 
 IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -H "Accept: application/json" \
@@ -94,13 +94,11 @@ echo "SUCCESS: IAM token retrieved."
 
 CURRENT_STEP="IBM_CLOUD_LOGIN"
 echo "STEP: Logging into IBM Cloud and targeting region/resource group..."
-# Use '--quiet' flag to suppress verbose login details
 ibmcloud login --apikey "${API_KEY}" -r "${REGION}" -g "${RESOURCE_GROUP}" --quiet
 echo "SUCCESS: Logged in and targeted region/resource group."
 
 CURRENT_STEP="TARGET_PVS_WORKSPACE"
 echo "STEP: Targeting Power Virtual Server workspace: ${PVS_CRN}..."
-# The output is generally minimal for this command unless context is already set
 ibmcloud pi ws target "${PVS_CRN}"
 echo "SUCCESS: PVS workspace targeted."
 
@@ -113,28 +111,28 @@ echo "STEP: Sending API request to create EMPTY IBM i LPAR: ${LPAR_NAME}..."
 
 API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
 
-# Perform the PVS instance creation API call
+# Perform the PVS instance creation API call 
 RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Authorization: Bearer ${IAM_TOKEN}" \
   -H "CRN: ${PVS_CRN}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}")
 
-# Attempt to extract Instance ID from the API response
-# If the call failed, this extraction will likely result in the string "null"
+# Attempt to extract Instance ID. The correct field for the new VM ID is pvmInstanceID.
 INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.pvmInstanceID // .pvmInstance.pvmInstanceID')
 
 if [[ "$INSTANCE_ID" == "null" || -z "$INSTANCE_ID" ]]; then
     echo "FAILURE: LPAR creation API call failed."
     echo "API Response (Failure Details):"
     
-    # Attempt to use jq for pretty-printing the error response. If jq fails (e.g., input is malformed or an array), it prints nothing, so we check if RESPONSE is empty.
+    # Attempt to use jq for pretty-printing the error response.
+    # If jq fails (e.g., input is malformed or an array), the raw response is printed instead.
     if echo "$RESPONSE" | jq . 2>/dev/null; then
-        # jq succeeded (meaning the response was parsable JSON)
         : 
     else
-        # jq failed (meaning the response was non-JSON or badly structured). Print raw response.
+        echo "--- Raw response (JSON parsing failed in script) ---"
         echo "$RESPONSE"
+        echo "----------------------------------------------------"
     fi
     exit 1
 fi
@@ -169,7 +167,7 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
 
     echo "CHECK: Attempt ${POLL_ATTEMPTS} / ${STATUS_POLL_LIMIT}. Checking status for ${LPAR_NAME}..."
 
-    # Use 'ibmcloud pi ins get' with JSON output (Suppress stderr for failed command runs)
+    # Use 'ibmcloud pi ins get' with JSON output and jq to get the status 
     STATUS_JSON=$(ibmcloud pi ins get "${LPAR_NAME}" --json 2>/dev/null)
     EXIT_CODE=$?
 
@@ -182,15 +180,15 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
 
     # Try to extract status and reset consecutive failure counter
     STATUS=$(echo "$STATUS_JSON" | jq -r '.status')
-    RETRY_FAILURES=0 # Reset failure count on successful command execution
+    RETRY_FAILURES=0 
 
     if [[ "$STATUS" == "SHUTOFF" ]]; then
         echo "SUCCESS: LPAR transitioned to desired state: ${STATUS}"
         break
-    elif [[ "$STATUS" == "BUILDING" || "$STATUS" == "PENDING" ]]; then
-        echo "INFO: LPAR status is '${STATUS}'. Provisioning without a boot volume should be faster, but initialization may take time. Waiting ${POLL_INTERVAL} seconds..."
     elif [[ "$STATUS" == "ACTIVE" ]]; then
         echo "INFO: LPAR status is '${STATUS}'. Waiting ${POLL_INTERVAL} seconds for transition to SHUTOFF..."
+    elif [[ "$STATUS" == "BUILDING" || "$STATUS" == "PENDING" ]]; then
+        echo "INFO: LPAR status is '${STATUS}'. Waiting ${POLL_INTERVAL} seconds for provisioning completion..."
     else
         echo "INFO: LPAR status is '${STATUS}'. Waiting ${POLL_INTERVAL} seconds..."
     fi
