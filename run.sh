@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # Configuration: Exit immediately if a command exits with a non-zero status (-e)
 # and exit on unbound variables (-u).
 set -eu
@@ -18,22 +17,25 @@ CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
 SUBNET_ID="ca78b0d5-f77f-4e8c-9f2c-545ca20ff073"
 Private_IP="192.168.0.69"
 KEYPAIR_NAME="murphy-clone-key"
+
+# CORRECTED EMPTY IBMi settings
 LPAR_NAME="empty-ibmi-lpar"
 MEMORY_GB=2
 PROCESSORS=0.25
 PROC_TYPE="shared"
 SYS_TYPE="s1022"
-IMAGE_ID="IBMI-EMPTY"
+IMAGE_ID="IBMI-EMPTY"             # Corrected Image ID to deploy without boot volume [4, 5]
+DEPLOYMENT_TYPE="VMNoStorage"    # Critical correction: Instructs the system to deploy without initial storage [3, 5, 6]
+
 API_VERSION="2024-02-28"
 
 # Control Variables
 MAX_RETRIES=2
-ATTEMPT=0
 POLL_INTERVAL=30
 INITIAL_WAIT=120
 IAM_TOKEN=""
 INSTANCE_ID=""
-STATUS_POLL_LIMIT=12 # 12 attempts * 30 seconds = 6 minutes maximum polling time
+STATUS_POLL_LIMIT=12 # 6 minutes maximum polling time
 
 # -----------------------------------------------------------
 # 1. Utility Functions and Cleanup
@@ -43,11 +45,9 @@ STATUS_POLL_LIMIT=12 # 12 attempts * 30 seconds = 6 minutes maximum polling time
 trap 'if [[ $? -ne 0 ]]; then echo "FAILURE: Script failed at step $CURRENT_STEP."; fi' EXIT
 
 # --- IMPORTANT: Disable verbose shell tracing globally for clean output ---
-# This suppresses the printing of commands, tokens, and large JSON payloads.
 set +x
 
-# JSON Payload Definition (required for LPAR provisioning API call)
-# Provisioning details configured via the variable store [1]
+# JSON Payload Definition (Includes the corrected image and deployment type)
 PAYLOAD=$(cat <<EOF
 {
     "serverName": "${LPAR_NAME}",
@@ -56,6 +56,7 @@ PAYLOAD=$(cat <<EOF
     "procType": "${PROC_TYPE}",
     "sysType": "${SYS_TYPE}",
     "imageID": "${IMAGE_ID}",
+    "deploymentType": "${DEPLOYMENT_TYPE}", 
     "keyPairName": "${KEYPAIR_NAME}",
     "networks": [
         {
@@ -74,27 +75,25 @@ EOF
 CURRENT_STEP="AUTH_TOKEN_RETRIEVAL"
 echo "STEP: Retrieving IAM access token..."
 
-# Retrieve IAM token using the API Key (This block MUST remain within set +x)
+# Retrieve IAM token (Sensitive operation hidden by set +x)
 IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -H "Accept: application/json" \
   -d "grant_type=urn:ibm:params:oauth:grant-type:apikey" \
   -d "apikey=${API_KEY}" )
 
-# Use jq to extract the token, ensuring robustness and security
 IAM_TOKEN=$(echo "$IAM_RESPONSE" | jq -r '.access_token')
 
-# Enable tracing temporarily only for error checks if needed, but keeping it off is safer.
 if [[ "$IAM_TOKEN" == "null" || -z "$IAM_TOKEN" ]]; then
     echo "FAILURE: Could not retrieve IAM token."
-    echo "Reason: Check API key validity."
+    echo "Reason: Check API key validity or IAM endpoint connectivity."
     exit 1
 fi
 echo "SUCCESS: IAM token retrieved."
 
 CURRENT_STEP="IBM_CLOUD_LOGIN"
 echo "STEP: Logging into IBM Cloud and targeting region/resource group..."
-# Use '--quiet' flag available on many CLI commands to reduce output [2, 3]
+# Use '--quiet' flag to suppress verbose login details
 ibmcloud login --apikey "${API_KEY}" -r "${REGION}" -g "${RESOURCE_GROUP}" --quiet
 echo "SUCCESS: Logged in and targeted region/resource group."
 
@@ -104,7 +103,7 @@ ibmcloud pi ws target "${PVS_CRN}"
 echo "SUCCESS: PVS workspace targeted."
 
 # -----------------------------------------------------------
-# 3. Create EMPTY IBM i LPAR
+# 3. Create EMPTY IBM i LPAR (VMNoStorage)
 # -----------------------------------------------------------
 
 CURRENT_STEP="CREATE_LPAR"
@@ -112,7 +111,7 @@ echo "STEP: Sending API request to create EMPTY IBM i LPAR: ${LPAR_NAME}..."
 
 API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
 
-# Perform the PVS instance creation API call (Must remain within set +x due to token/payload)
+# Perform the PVS instance creation API call
 RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Authorization: Bearer ${IAM_TOKEN}" \
   -H "CRN: ${PVS_CRN}" \
@@ -157,10 +156,10 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
         exit 1
     fi
 
-    echo "CHECK: Attempt ${POLL_ATTEMPTS} / ${STATUS_POLL_LIMIT}. Checking status..."
+    echo "CHECK: Attempt ${POLL_ATTEMPTS} / ${STATUS_POLL_LIMIT}. Checking status for ${LPAR_NAME}..."
 
-    # Use 'ibmcloud pi ins get' with JSON output and jq to get the status [4, 5]
-    # We explicitly suppress errors for now in case the service is temporarily unavailable during polling
+    # Use 'ibmcloud pi ins get' to retrieve status (Suppress stderr for failed command runs during temporary outages)
+    # The image name used here is one of the supported stock images [7].
     STATUS_JSON=$(ibmcloud pi ins get "${LPAR_NAME}" --json 2>/dev/null)
     EXIT_CODE=$?
 
@@ -171,17 +170,17 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
         continue
     fi
 
-    # Try to extract status and reset consecutive failure counter
+    # Extract status and reset failure counter
     STATUS=$(echo "$STATUS_JSON" | jq -r '.status')
     RETRY_FAILURES=0 # Reset failure count on successful command execution
 
     if [[ "$STATUS" == "SHUTOFF" ]]; then
         echo "SUCCESS: LPAR transitioned to desired state: ${STATUS}"
         break
+    elif [[ "$STATUS" == "BUILDING" || "$STATUS" == "PENDING" ]]; then
+        echo "INFO: LPAR status is '${STATUS}'. Provisioning without a boot volume should be faster, but initialization may take time. Waiting ${POLL_INTERVAL} seconds..."
     elif [[ "$STATUS" == "ACTIVE" ]]; then
         echo "INFO: LPAR status is '${STATUS}'. Waiting ${POLL_INTERVAL} seconds for transition to SHUTOFF..."
-    elif [[ "$STATUS" == "BUILDING" || "$STATUS" == "PENDING" ]]; then
-        echo "INFO: LPAR status is '${STATUS}'. Waiting ${POLL_INTERVAL} seconds for provisioning completion..."
     else
         echo "INFO: LPAR status is '${STATUS}'. Waiting ${POLL_INTERVAL} seconds..."
     fi
@@ -197,11 +196,7 @@ done
 # 5. Final Success
 # -----------------------------------------------------------
 echo "------------------------------------------------------"
-echo "FINAL STATUS: LPAR ${LPAR_NAME} successfully provisioned and shut off."
+echo "FINAL SUCCESS: LPAR ${LPAR_NAME} successfully provisioned without storage and reached SHUTOFF status."
 echo "------------------------------------------------------"
 
-# Re-enable shell tracing only if needed for post-script environment (optional, keeping off for absolute cleanness)
-# set -x
-
 exit 0
-
