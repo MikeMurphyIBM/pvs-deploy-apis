@@ -1,65 +1,64 @@
 #!/bin/sh
 
+# Set core shell options for reliability:
+# -e: Exit immediately if a command exits with a non-zero status.
+# -u: Treat unset variables as an error.
+set -eu
+
+# Note: We assume shell tracing (set -x) is active in the environment (e.g., Code Engine job run logs).
+# We use 'set +x' and 'set -x' blocks to selectively suppress output for sensitive or verbose commands.
+
 echo "=== EMPTY IBM i Deployment Script ==="
+echo "--- Starting Phase 1: Environment Setup and Authentication ---"
 
 # -------------------------
-# 1. Environment Variables
+# 1. Environment Variables (No verbose output needed here)
 # -------------------------
 
-API_KEY="${IBMCLOUD_API_KEY}"   # Provided via Code Engine secret
-
-# Full PowerVS Workspace CRN (MUST be used in the request header)
+API_KEY="${IBMCLOUD_API_KEY}"   
 PVS_CRN="crn:v1:bluemix:public:power-iaas:dal10:a/21d74dd4fe814dfca20570bbb93cdbff:cc84ef2f-babc-439f-8594-571ecfcbe57a::"
-
-# PowerVS identifiers
 RESOURCE_GROUP="Default"
 REGION="us-south"
 ZONE="dal10"
-
-# PowerVS Workspace ID
 CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
-
 SUBNET_ID="ca78b0d5-f77f-4e8c-9f2c-545ca20ff073"
 KEYPAIR_NAME="murphy-clone-key"
-
-# EMPTY IBMi settings
 LPAR_NAME="empty-ibmi-lpar"
 MEMORY_GB=2
 PROCESSORS=0.25
 PROC_TYPE="shared"
 SYS_TYPE="s1022"
-
-# Special system image token
 IMAGE_ID="IBMI-EMPTY"
-
 API_VERSION="2024-02-28"
 
 # -------------------------
-# 2. IAM Token
+# 2. IAM Token Acquisition
 # -------------------------
 
-echo "--- Requesting IAM access token ---"
+echo "--- STEP 2.1: Requesting IAM access token ---"
 
+# Temporarily disable shell tracing to hide the API_KEY input and the base64 token output [Conversation History]
+set +x
 IAM_TOKEN=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${API_KEY}" \
   | jq -r '.access_token')
+set -x # Re-enable tracing
 
 if [ "$IAM_TOKEN" = "null" ] || [ -z "$IAM_TOKEN" ]; then
-  echo " ERROR retrieving IAM token"
+  echo " FAILURE: ERROR retrieving IAM token. Check API_KEY and network connectivity." >&2
   exit 1
 fi
-
-echo "--- Token acquired ---"
+echo "--- SUCCESS: IAM access token acquired ---"
 
 # -------------------------
-# 3. Build Payload
+# 3. Build Payload (Silent Construction)
 # -------------------------
 
-echo "--- Building payload for EMPTY IBM i ---"
+echo "--- STEP 3.1: Building payload for EMPTY IBM i ---"
 
-set +x  # Disable tracing
-
+# Disable tracing to hide the large JSON payload construction [Conversation History]
+set +x  
 PAYLOAD=$(cat <<EOF
 {
   "serverName": "${LPAR_NAME}",
@@ -81,139 +80,138 @@ PAYLOAD=$(cat <<EOF
 }
 EOF
 )
-set -x
+set -x     # Re-enable tracing
 
-echo "$PAYLOAD" | jq .
+# Note: Removed "echo "$PAYLOAD" | jq ." to keep output clean.
 
 # -------------------------
-# 4. Make API Call
+# 4. Make API Call (Silent Execution and Intelligent Output)
 # -------------------------
-
-API_VERSION="2024-02-28"
 
 API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
 
-echo "--- Creating EMPTY IBM i LPAR ---"
+echo "--- STEP 4.1: Sending request to create EMPTY IBM i LPAR ---"
 
+# Disable tracing to hide the verbose curl execution command and the large RESPONSE variable assignment [Conversation History]
+set +x 
 RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Authorization: Bearer ${IAM_TOKEN}" \
   -H "CRN: ${PVS_CRN}" \
   -H "Content-Type: application/json" \
-  -d "${PAYLOAD}")
+  -d "${PAYLOAD}" 2>/dev/null) # -s makes curl silent, 2>/dev/null suppresses curl errors
+set -x 
 
+# Extract the unique Instance ID from the API response
+NEW_LPAR_ID=$(echo "$RESPONSE" | jq -r '.pvmInstanceID // empty' 2>/dev/null || true)
 
-echo "--- Response ---"
-echo "$RESPONSE" | jq .
-
-# -------------------------
-# 5. Success check
-# -------------------------
-
-# 5a. Extract the PVM Instance ID (Retained from previous successful extraction)
-PVM_INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.[].pvmInstanceID' 2>/dev/null)
-
-if [ -z "$PVM_INSTANCE_ID" ] || [ "$PVM_INSTANCE_ID" == "null" ]; then
-  echo " ERROR deploying EMPTY IBM i: PVM Instance ID could not be retrieved from the response."
-  exit 1
+if [ -n "$NEW_LPAR_ID" ]; then
+    echo "--- SUCCESS: EMPTY IBM i LPAR [ID: $NEW_LPAR_ID] creation request submitted ---"
+    PVM_INSTANCE_ID="$NEW_LPAR_ID" # Set the variable for subsequent steps
+elif echo "$RESPONSE" | jq . > /dev/null 2>&1; then
+    # If API call returned valid JSON but without an ID (i.e., API failure)
+    ERROR_MESSAGE=$(echo "$RESPONSE" | jq -r '.error.message // "Unknown API error."')
+    echo "--- FAILURE: LPAR creation failed (API returned error). ---" >&2
+    echo "Error Detail: $ERROR_MESSAGE" >&2
+    exit 1
+else
+    # Non-JSON or empty response
+    echo "--- FAILURE: LPAR creation failed (Non-API error). Check network or authentication. ---" >&2
+    echo "Raw Output (for diagnostics): $RESPONSE" >&2
+    exit 1
 fi
 
-echo " SUCCESS: EMPTY IBM i LPAR deployment submitted. Instance ID: $PVM_INSTANCE_ID"
+# -------------------------
+# 5. CLI Authentication and Polling Setup
+# -------------------------
+
+# The PVM_INSTANCE_ID check logic is handled in step 4's success block. If we reach here, PVM_INSTANCE_ID is set.
 
 # 5b. IBM Cloud Authentication and Targeting 
+echo "--- STEP 5.2: Performing IBM Cloud CLI login ---"
+# Suppress noisy login status messages (e.g., "API endpoint:...", "Logging in...")
+ibmcloud login --apikey "$API_KEY" -r "$REGION" -g "$RESOURCE_GROUP" > /dev/null
 
-# Log in using the API Key
-# If using an API key, the login command should be non-interactive:
-echo "Attempting IBM Cloud login..."
-# Logging in using the API Key (This creates a login session )
-ibmcloud login --apikey "$API_KEY" -r "$REGION" -g "$RESOURCE_GROUP"
-
-# Check if login succeeded (optional but recommended)
 if [ $? -ne 0 ]; then
-    echo "FATAL ERROR: IBM Cloud login failed. Cannot proceed with PVS interaction."
+    echo " FATAL ERROR: IBM Cloud login failed. Check API key, region, and resource group settings." >&2
     exit 1
 fi
+echo "--- SUCCESS: IBM Cloud login completed ---"
 
 # Target the PVS Service Workspace
-echo "Targeting PVS workspace: $PVS_CRN"
-# The PowerVS workspace must be explicitly targeted to run instance commands
-# The command to target the service workspace is ibmcloud pi ws tg <CRN> 
-ibmcloud pi ws tg "$PVS_CRN"
+echo "--- STEP 5.3: Targeting PVS workspace $PVS_CRN ---"
+# Suppress noisy targeting status messages (e.g., "Targeting service crn:...")
+ibmcloud pi ws tg "$PVS_CRN" > /dev/null
 
-# Check if targeting succeeded 
 if [ $? -ne 0 ]; then
-    echo "FATAL ERROR: Failed to target PowerVS workspace. Check CRN or region."
+    echo " FATAL ERROR: Failed to target PowerVS workspace. Check CRN or workspace availability." >&2
     exit 1
 fi
+echo "--- SUCCESS: PowerVS workspace targeted ---"
 
 # 5c. Define Polling Loop Parameters
 MAX_WAIT_SECONDS=600  
 POLL_INTERVAL=30       
 ELAPSED_TIME=0
 
-# --- CRITICAL DIAGNOSTIC STEP ---
+# --------------------------------------------------------
 # 5d. Polling Loop: Wait for status to become "SHUTOFF"
-echo " --- Starting PVS instance polling loop. Waiting for SHUTOFF status... ---"
+# --------------------------------------------------------
+echo "--- STEP 5.4: Starting polling loop. Waiting for instance $PVM_INSTANCE_ID to reach SHUTOFF status ---"
 
 while [ $ELAPSED_TIME -lt $MAX_WAIT_SECONDS ]; do
   
-  # Check if the PVS workspace context is maintained (REQUIRES PVS_WORKSPACE_CRN variable)
-  echo "DEBUG: Checking PVS target context..."
-  ibmcloud pi ws context 
+  # Retrieve instance details silently to avoid logging verbose JSON output repeatedly
+  set +x
+  # Use 'instance get' to retrieve the current status
+  INSTANCE_DETAILS=$(ibmcloud pi instance get "$PVM_INSTANCE_ID" --json 2>/dev/null)
+  set -x
   
-  # Retrieve the current instance details using the PowerVS CLI
-  INSTANCE_DETAILS=$(ibmcloud pi instance get "$PVM_INSTANCE_ID" --json 2>&1)
+  # Attempt to extract status from the primary JSON object structure
+  RAW_STATUS=$(echo "$INSTANCE_DETAILS" | jq -r '.status' 2>/dev/null || true)
   
-  # DEBUG LINE: Output the raw PVS result to diagnose CLI failure or authentication issue
-  echo "DEBUG: Raw PVS Output (Check for 'Authorization failed' or similar errors):"
-  echo "$INSTANCE_DETAILS" 
-  
-  # Attempt to extract status using the single object filter (suppress jq internal errors)
-  RAW_STATUS=$(echo "$INSTANCE_DETAILS" | jq -r '.status' 2>/dev/null)
-  
-  # Fallback check for array output
-  if [ -z "$RAW_STATUS" ]; then
-      RAW_STATUS=$(echo "$INSTANCE_DETAILS" | jq -r '.[].status' 2>/dev/null)
+  # Check if retrieval/extraction failed (status is empty or null)
+  if [ -z "$RAW_STATUS" ] || [ "$RAW_STATUS" == "null" ]; then
+    
+    # Check if the output suggests authentication failure based on expected CLI errors
+    if echo "$INSTANCE_DETAILS" | grep -q "not authorized\|Authentication failed\|IAM token authorization\|token expired"; then
+        echo " WARNING: Authentication issue detected during polling. Retrying after token check failure." >&2
+    elif [ -z "$INSTANCE_DETAILS" ]; then
+        echo " WARNING: PVS CLI returned NO output (Potential non-existent instance or execution failure). Retrying..." >&2
+    elif echo "$INSTANCE_DETAILS" | jq . >/dev/null 2>&1; then
+        # If it's valid JSON but parsing failed (not finding .status), pull the error message if possible
+        ERROR_MESSAGE=$(echo "$INSTANCE_DETAILS" | jq -r '.error.message // "JSON parsing failure - unexpected structure."')
+        echo " WARNING: Polling returned API error: $ERROR_MESSAGE. Retrying..." >&2
+    else
+        echo " WARNING: Could not retrieve status for instance $PVM_INSTANCE_ID. Retrying in $POLL_INTERVAL seconds..." >&2
+    fi
+    
+    # Wait, increment time, and continue the loop
+    sleep "$POLL_INTERVAL"
+    ELAPSED_TIME=$((ELAPSED_TIME + POLL_INTERVAL))
+    continue # Skip the status check and start the next loop iteration
   fi
 
-  # Check if retrieval/extraction failed (status is empty)
-  if [ -z "$RAW_STATUS" ]; then
-      echo " WARNING: Could not retrieve status for instance $PVM_INSTANCE_ID. Retrying in $POLL_INTERVAL seconds..."
-      
-      # Provide specific debug insight based on the raw output collected:
-      if echo "$INSTANCE_DETAILS" | grep -q "not authorized\|Authentication failed\|IAM token authorization\|token expired"; then
-          echo " DEBUG ACTION REQUIRED: CLI output suggests Authentication or Authorization failure. Ensure ibmcloud login completed successfully and token is fresh."
-      elif [ -z "$INSTANCE_DETAILS" ]; then
-          echo " DEBUG ACTION REQUIRED: PVS CLI command returned NO output (Execution failure or non-existent instance ID)."
-      else
-          echo " DEBUG ACTION REQUIRED: PVS CLI returned output, but JSON parsing failed. Check if '.status' is the correct JSON path."
-      fi
-      
-      sleep $POLL_INTERVAL
-      ELAPSED_TIME=$((ELAPSED_TIME + $POLL_INTERVAL))
-      continue
+  # Check the extracted status against the desired state
+  if [ "$RAW_STATUS" = "SHUTOFF" ]; then
+    echo "--- SUCCESS: Instance $PVM_INSTANCE_ID is now SHUTOFF after $ELAPSED_TIME seconds. ---"
+    break
   fi
 
-  # Normalize status to uppercase for reliable comparison
-  CURRENT_STATUS_UPPER=$(echo "$RAW_STATUS" | tr '[:lower:]' '[:upper:]')
-  
-  # Check for successful, stable state (SHUTOFF is expected end state)
-  if [ "$CURRENT_STATUS_UPPER" == "SHUTOFF" ] || [ "$CURRENT_STATUS_UPPER" == "STOPPED" ]; then
-    echo " SUCCESS: PVS instance $PVM_INSTANCE_ID successfully provisioned and is in SHUTOFF state."
-    exit 0
+  # Provide periodic status update (e.g., every 3 minutes, plus the first check)
+  if [ "$ELAPSED_TIME" -eq 0 ] || [ $((ELAPSED_TIME % 180)) -eq 0 ]; then
+    echo "--- STATUS: Instance $PVM_INSTANCE_ID is currently $RAW_STATUS. Elapsed time: $ELAPSED_TIME seconds. ---"
   fi
 
-  # Check for definitive failure states
-  if [ "$CURRENT_STATUS_UPPER" == "ERROR" ] || [ "$CURRENT_STATUS_UPPER" == "FAILED" ]; then
-    echo " ERROR: PVS instance $PVM_INSTANCE_ID reported permanent status $CURRENT_STATUS_UPPER. Deployment failed."
-    exit 1
-  fi
+  # Wait, increment time, and loop check
+  sleep "$POLL_INTERVAL"
+  ELAPSED_TIME=$((ELAPSED_TIME + POLL_INTERVAL))
 
-  # Report current status and wait
-  echo " Status is $CURRENT_STATUS_UPPER ($ELAPSED_TIME seconds elapsed). Waiting $POLL_INTERVAL seconds..."
-  sleep $POLL_INTERVAL
-  ELAPSED_TIME=$((ELAPSED_TIME + $POLL_INTERVAL))
 done
 
-# 5e. Timeout Failure
-echo " ERROR: PVS instance polling timed out after $MAX_WAIT_SECONDS seconds. Deployment status is still $CURRENT_STATUS_UPPER."
-exit 1
+# -------------------------
+# 5e. Polling Loop Failure Check
+# -------------------------
+if [ $ELAPSED_TIME -ge $MAX_WAIT_SECONDS ]; then
+  echo "--- FAILURE: Timed out waiting for instance $PVM_INSTANCE_ID to shut off after $MAX_WAIT_SECONDS seconds. Current status: $RAW_STATUS ---" >&2
+  exit 1
+fi
