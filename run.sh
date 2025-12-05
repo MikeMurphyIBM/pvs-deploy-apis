@@ -218,4 +218,4 @@ done
 # 5e. Timeout Failure
 echo " ERROR: PVS instance polling timed out after $MAX_WAIT_SECONDS seconds. Deployment status is still $CURRENT_STATUS_UPPER."
 exit 1
-set -x
+
