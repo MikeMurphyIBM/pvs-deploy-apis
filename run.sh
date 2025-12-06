@@ -207,4 +207,22 @@ echo "------------------------------------------------------"
 echo "FINAL SUCCESS: LPAR ${LPAR_NAME} successfully provisioned without storage and reached SHUTOFF status."
 echo "------------------------------------------------------"
 
+echo ""
+echo "--- Evaluating whether next Code Engine job should run ---"
+
+# RUN_ATTACH_JOB must be set as Yes or No in Code Engine environment variables
+if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
+    echo "RUN_ATTACH_JOB=Yes — launching job: snap-clone-attach-deploy"
+
+    # Trigger the next job asynchronously
+    ibmcloud ce jobrun submit --job snap-clone-attach-deploy || {
+        echo "ERROR: Failed to trigger snap-clone-attach-deploy job"
+        exit 10
+    }
+
+else
+    echo "RUN_ATTACH_JOB=No — skipping snap-clone-attach-deploy"
+fi
+
+
 exit 0
