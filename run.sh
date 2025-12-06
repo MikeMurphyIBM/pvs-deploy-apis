@@ -16,7 +16,7 @@ REGION="us-south"
 ZONE="dal10"
 CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
 SUBNET_ID="ca78b0d5-f77f-4e8c-9f2c-545ca20ff073"
-Private_IP="192.168.0.69" # <--- Shell variable holding the IP value
+Private_IP="192.168.0.69" 
 KEYPAIR_NAME="murphy-clone-key"
 
 # EMPTY IBMi settings
@@ -25,8 +25,8 @@ MEMORY_GB=2
 PROCESSORS=0.25
 PROC_TYPE="shared"
 SYS_TYPE="s1022"
-IMAGE_ID="IBMI-EMPTY"             # Deploying the image without a boot volume
-DEPLOYMENT_TYPE="VMNoStorage"    # Critical for deploying without initial storage
+IMAGE_ID="IBMI-EMPTY"             
+DEPLOYMENT_TYPE="VMNoStorage"   
 
 API_VERSION="2024-02-28"
 
@@ -62,7 +62,7 @@ PAYLOAD=$(cat <<EOF
     "networks": [
         {
             "networkID": "${SUBNET_ID}",
-            "ipAddress": "${Private_IP}"  # <--- Correct API parameter is used here.
+            "ipAddress": "${Private_IP}"  
         }
     ]
 }
@@ -76,7 +76,7 @@ EOF
 CURRENT_STEP="AUTH_TOKEN_RETRIEVAL"
 echo "STEP: Retrieving IAM access token..."
 
-# Retrieve IAM token (Sensitive operation hidden by set +x)
+# Retrieve IAM token 
 IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -H "Accept: application/json" \
@@ -94,7 +94,6 @@ echo "SUCCESS: IAM token retrieved."
 
 CURRENT_STEP="IBM_CLOUD_LOGIN"
 echo "STEP: Logging into IBM Cloud and targeting region/resource group..."
-# Use '--quiet' flag to suppress verbose login details
 ibmcloud login --apikey "${API_KEY}" -r "${REGION}" -g "${RESOURCE_GROUP}" --quiet
 echo "SUCCESS: Logged in and targeted region/resource group."
 
@@ -112,21 +111,26 @@ echo "STEP: Sending API request to create EMPTY IBM i LPAR: ${LPAR_NAME}..."
 
 API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
 
-# Perform the PVS instance creation API call
-RESPONSE=$(curl -s -X POST "${API_URL}" \
+# --- DEBUGGING ENABLED ---
+set -x # Enable verbose tracing
+
+# Perform the PVS instance creation API call (Added -v for verbose curl output)
+RESPONSE=$(curl -v -X POST "${API_URL}" \
   -H "Authorization: Bearer ${IAM_TOKEN}" \
   -H "CRN: ${PVS_CRN}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}")
 
-# Attempt to extract Instance ID. Using multiple paths including the previous array iteration.
+set +x # Disable verbose tracing
+
+# Attempt to extract Instance ID from the API response
 INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.[].pvmInstanceID // .pvmInstanceID // .pvmInstance.pvmInstanceID' 2>/dev/null)
 
 if [[ "$INSTANCE_ID" == "null" || -z "$INSTANCE_ID" ]]; then
     echo "FAILURE: LPAR creation API call failed."
     echo "API Response (Failure Details):"
     
-    # Attempt to use jq for pretty-printing the error response. If jq fails, print raw response.
+    # Attempt to use jq for pretty-printing the error response.
     if echo "$RESPONSE" | jq . 2>/dev/null; then
         : 
     else
@@ -180,7 +184,7 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
         continue
     fi
 
-    # Extract status and reset failure counter
+    # Try to extract status and reset consecutive failure counter
     STATUS=$(echo "$STATUS_JSON" | jq -r '.status')
     RETRY_FAILURES=0 # Reset failure count on successful command execution
 
