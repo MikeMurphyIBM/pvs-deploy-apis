@@ -30,13 +30,13 @@ DEPLOYMENT_TYPE="VMNoStorage"
 
 API_VERSION="2024-02-28"
 
-# Control Variables
-MAX_RETRIES=2
-POLL_INTERVAL=30
+# Control Variables (Updated for increased stability)
+MAX_RETRIES=4
+POLL_INTERVAL=45
 INITIAL_WAIT=120
 IAM_TOKEN=""
 INSTANCE_ID=""
-STATUS_POLL_LIMIT=12 
+STATUS_POLL_LIMIT=20 
 
 # -----------------------------------------------------------
 # 1. Utility Functions and Cleanup
@@ -111,17 +111,12 @@ echo "STEP: Sending API request to create EMPTY IBM i LPAR: ${LPAR_NAME}..."
 
 API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
 
-# --- DEBUGGING ENABLED ---
-set -x # Enable verbose tracing
-
-# Perform the PVS instance creation API call (Added -v for verbose curl output)
-RESPONSE=$(curl -v -X POST "${API_URL}" \
+# Perform the PVS instance creation API call (Removed -v for clean output)
+RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Authorization: Bearer ${IAM_TOKEN}" \
   -H "CRN: ${PVS_CRN}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}")
-
-set +x # Disable verbose tracing
 
 # Attempt to extract Instance ID from the API response
 INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.[].pvmInstanceID // .pvmInstanceID // .pvmInstance.pvmInstanceID' 2>/dev/null)
@@ -130,7 +125,6 @@ if [[ "$INSTANCE_ID" == "null" || -z "$INSTANCE_ID" ]]; then
     echo "FAILURE: LPAR creation API call failed."
     echo "API Response (Failure Details):"
     
-    # Attempt to use jq for pretty-printing the error response.
     if echo "$RESPONSE" | jq . 2>/dev/null; then
         : 
     else
@@ -186,7 +180,7 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
 
     # Try to extract status and reset consecutive failure counter
     STATUS=$(echo "$STATUS_JSON" | jq -r '.status')
-    RETRY_FAILURES=0 # Reset failure count on successful command execution
+    RETRY_FAILURES=0 
 
     if [[ "$STATUS" == "SHUTOFF" ]]; then
         echo "SUCCESS: LPAR transitioned to desired state: ${STATUS}"
