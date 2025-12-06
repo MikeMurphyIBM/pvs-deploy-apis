@@ -16,7 +16,7 @@ REGION="us-south"
 ZONE="dal10"
 CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
 SUBNET_ID="ca78b0d5-f77f-4e8c-9f2c-545ca20ff073"
-Private_IP="192.168.0.69" # Static IP to be assigned
+Private_IP="192.168.0.69"
 KEYPAIR_NAME="murphy-clone-key"
 
 # EMPTY IBMi settings
@@ -36,7 +36,7 @@ POLL_INTERVAL=30
 INITIAL_WAIT=120
 IAM_TOKEN=""
 INSTANCE_ID=""
-STATUS_POLL_LIMIT=12 
+STATUS_POLL_LIMIT=12 # 6 minutes maximum polling time
 
 # -----------------------------------------------------------
 # 1. Utility Functions and Cleanup
@@ -48,7 +48,7 @@ trap 'if [[ $? -ne 0 ]]; then echo "FAILURE: Script failed at step $CURRENT_STEP
 # --- IMPORTANT: Disable verbose shell tracing globally for clean output ---
 set +x
 
-# JSON Payload Definition (Includes the network configuration for static IP assignment)
+# JSON Payload Definition (Uses the corrected ipAddress field)
 PAYLOAD=$(cat <<EOF
 {
     "serverName": "${LPAR_NAME}",
@@ -62,7 +62,7 @@ PAYLOAD=$(cat <<EOF
     "networks": [
         {
             "networkID": "${SUBNET_ID}",
-            "fixedIP": "${Private_IP}"  
+            "ipAddress": "${Private_IP}"  
         }
     ]
 }
@@ -104,7 +104,7 @@ ibmcloud pi ws target "${PVS_CRN}"
 echo "SUCCESS: PVS workspace targeted."
 
 # -----------------------------------------------------------
-# 3. Create EMPTY IBM i LPAR
+# 3. Create EMPTY IBM i LPAR (VMNoStorage)
 # -----------------------------------------------------------
 
 CURRENT_STEP="CREATE_LPAR"
@@ -119,14 +119,13 @@ RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}")
 
-# Attempt to extract Instance ID. Using multiple paths including the previous array iteration.
+# Attempt to extract Instance ID from the API response
 INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.[].pvmInstanceID // .pvmInstanceID // .pvmInstance.pvmInstanceID' 2>/dev/null)
 
 if [[ "$INSTANCE_ID" == "null" || -z "$INSTANCE_ID" ]]; then
     echo "FAILURE: LPAR creation API call failed."
     echo "API Response (Failure Details):"
     
-    # Attempt to use jq for pretty-printing the error response. If jq fails, print raw response.
     if echo "$RESPONSE" | jq . 2>/dev/null; then
         : 
     else
