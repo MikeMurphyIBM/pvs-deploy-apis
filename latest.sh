@@ -1,9 +1,13 @@
 #!/bin/bash
 
-echo "[API-DEPLOY] ==============================="
-echo "[API-DEPLOY] Job Stage Started"
-echo "[API-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-echo "[API-DEPLOY] ==============================="
+echo "[EMPTY-DEPLOY] ==============================="
+echo "[EMPTY-DEPLOY] Job Stage Started"
+echo "[EMPTY-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "[EMPTY-DEPLOY] ==============================="
+
+echo "====================================================================="
+echo "Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
+echo "====================================================================="
 
 set -eu
 
@@ -57,9 +61,10 @@ STATUS_POLL_LIMIT=20
 
 echo "Variables loaded successfully."
 
-# ----------------------------------------------------------------
-# IAM Authentication
-# ----------------------------------------------------------------
+#--------------------------------------------------------------
+echo "Step 1 of 3:  IBM Cloud Authentication"
+#--------------------------------------------------------------
+
 CURRENT_STEP="AUTH_TOKEN_RETRIEVAL"
 echo "STEP: Retrieving IAM access token..."
 IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
@@ -74,10 +79,10 @@ if [[ -z "$IAM_TOKEN" || "$IAM_TOKEN" == "null" ]]; then
     exit 1
 fi
 
-echo "SUCCESS: IAM token retrieved."
+echo "Step 1 of 3 Complete, Successfully authenticated into IBM Cloud"
 
-# ----------------------------------------------------------------
-# IBM Cloud Login
+#-----------------------------------------------------------------
+#IBM Cloud Login
 # ----------------------------------------------------------------
 CURRENT_STEP="IBM_CLOUD_LOGIN"
 echo "STEP: Logging into IBM Cloud..."
@@ -85,16 +90,18 @@ ibmcloud login --apikey "${API_KEY}" -r "${REGION}" -g "${RESOURCE_GROUP}" --qui
 echo "SUCCESS: IBM Cloud login completed."
 
 # ----------------------------------------------------------------
-# Target Workspace
+echo "Stage 2 of 3: Target PowerVS Workspace"
 # ----------------------------------------------------------------
 CURRENT_STEP="TARGET_PVS_WORKSPACE"
 echo "STEP: Targeting Power Virtual Server workspace..."
 ibmcloud pi ws target "${PVS_CRN}"
-echo "SUCCESS: Workspace targeted."
+echo "Stage 2 of 3 Complete, PowerVS Workspace targeted for deployment"
+
 
 # ----------------------------------------------------------------
-# Submit LPAR Creation
+echo "Stage 3 of 3: Create Empty IBMi LPAR in defined Subnet w/PrivateIP"
 # ----------------------------------------------------------------
+
 CURRENT_STEP="CREATE_LPAR"
 echo "STEP: Submitting LPAR create request..."
 
@@ -134,7 +141,7 @@ if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
     exit 1
 fi
 
-echo "SUCCESS: $LPAR_NAME creation request accepted."
+echo "Success: $LPAR_NAME creation request accepted."
 echo "Instance ID = ${INSTANCE_ID}"
 echo "Subnet = ${SUBNET_ID}"
 echo "Reserved Private IP = ${Private_IP}"
@@ -199,7 +206,7 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
     sleep $POLL_INTERVAL
 done
 
-echo "SUCCESS: LPAR reached SHUTOFF state."
+echo "Stage 3 of 3 Complete, IBMi partition is ready for Snapshot/Clone Operations"
 
 
 # ----------------------------------------------------------------
