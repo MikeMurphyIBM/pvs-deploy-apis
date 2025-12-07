@@ -201,18 +201,30 @@ CURRENT_STEP="SUBMIT_NEXT_JOB"
 echo "STEP: Evaluate triggering next Code Engine job..."
 
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
-    
-    echo "Targeting CE Project: IBMi"
-    ibmcloud ce project select --name IBMi --output json >/dev/null
-    
-    echo "Submitting snap-attach job run..."
-    NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-attach --output json | jq -r '.name')
+    echo "Next job execution requested — attempting launch..."
 
-    echo "SUCCESS: Triggered followup job instance:"
-    echo "RUN NAME: $NEXT_RUN"
+    # Prevent failure from stopping execution
+    set +e
+
+    NEXT_RUN=$(ibmcloud ce jobrun submit \
+        --job snap-attach \
+        -o json 2>/dev/null | jq -r '.name')
+
+    EXIT_CODE=$?
+
+    # Restore fail-fast behavior afterwards
+    set -e
+
+    if [[ $EXIT_CODE -ne 0 || "$NEXT_RUN" == "null" || -z "$NEXT_RUN" ]]; then
+        echo "[WARNING] Failed to submit next job 'snap-attach'"
+        echo "[WARNING] Continuing without triggering downstream job..."
+    else
+        echo "Successfully triggered next job: $NEXT_RUN"
+    fi
 else
-    echo "RUN_ATTACH_JOB=No → downstream job not invoked."
+    echo "RUN_ATTACH_JOB=No — downstream job trigger skipped."
 fi
+
 
 
 echo "[API-DEPLOY] Job Completed Successfully"
