@@ -219,7 +219,7 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     CURRENT_STEP="SUBMIT_NEXT_JOB"
     log_info "Submitting next Code Engine job: snap-attach"
 
-    NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-attach --output json 2>/dev/null | jq -r '.name')
+    NEXT_RUN=$(ibmcloud code-engine jobrun submit --job snap-attach --output json 2>/dev/null | jq -r '.name')
 
     if [[ -z "$NEXT_RUN" || "$NEXT_RUN" == "null" ]]; then
         log_error "Next job submission failed"
