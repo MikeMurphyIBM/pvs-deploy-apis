@@ -1,9 +1,9 @@
 #!/bin/bash
 
-echo "==============================="
-echo " Job Stage: API-Deploy"
-echo " Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-echo "==============================="
+echo "[API-DEPLOY] ==============================="
+echo "[API-DEPLOY] Job Stage Started"
+echo "[API-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "[API-DEPLOY] ==============================="
 
 
 # Configuration: Exit immediately if a command exits with a non-zero status (-e)
