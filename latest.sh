@@ -140,8 +140,32 @@ echo "Subnet = ${SUBNET_ID}"
 echo "Reserved Private IP = ${Private_IP}"
 echo "LPAR will require IBMi installation media. No volumes were provisioned."
 
-echo "Waiting ${INITIAL_WAIT} seconds for LPAR initialize."
-sleep ${INITIAL_WAIT}
+# ----------------------------------------------------------------
+# Grace wait time after initial provisioning (avoid false errors)
+# ----------------------------------------------------------------
+GRACE_TOTAL_SECONDS=360     # 6 min
+GRACE_STEP_SECONDS=90      # 2 min interval
+elapsed=0
+
+echo ""
+echo "Provisioning request accepted."
+echo "Waiting several minutes before checking status..."
+echo "(Provisioning will occur asynchronously within PowerVS)"
+echo ""
+
+while [[ $elapsed -lt $GRACE_TOTAL_SECONDS ]]; do
+    printf "Provisioning in progress... LPAR not online yet (%02d:%02d elapsed)\n" \
+           $((elapsed / 60)) $((elapsed % 60))
+
+    sleep $GRACE_STEP_SECONDS
+    elapsed=$((elapsed + GRACE_STEP_SECONDS))
+done
+
+echo ""
+echo "Initial provisioning window complete."
+echo "Beginning actual status polling now..."
+echo ""
+
 
 # ----------------------------------------------------------------
 # Poll State
@@ -209,35 +233,41 @@ trap - ERR
 # ----------------------------------------------------------------
 # Trigger Next Job
 # ----------------------------------------------------------------
+# ----------------------------------------------------------------
+# Trigger Next Job
+# ----------------------------------------------------------------
 CURRENT_STEP="SUBMIT_NEXT_JOB"
 echo "STEP: Evaluate triggering next Code Engine job..."
 
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     echo "Next job execution requested — attempting launch..."
 
-# Prevent failure from stopping execution
-set +e
+    
+    # Re-login to ensure CE context is valid inside container
+    ibmcloud login --apikey "${IBMCLOUD_API_KEY}" -r us-south -g Default --quiet
 
-RAW_RESPONSE=$(ibmcloud ce jobrun submit \
-    --job snap-attach \
-    -o json 2>/dev/null)
+    # Target same CE project
+    echo "Targeting CE project: IBMi"
+    ibmcloud ce project select --name IBMi --quiet
 
-SUBMIT_ERR=${PIPESTATUS[0]}   # captures ibmcloud command exit code
+    # Prevent failure from stopping execution
+    set +e
 
-NEXT_RUN=$(echo "$RAW_RESPONSE" | jq -r '.name' 2>/dev/null)
+    NEXT_RUN=$(ibmcloud ce jobrun submit \
+        --job snap-attach \
+        -o json 2>/dev/null | jq -r '.name')
 
-# Restore fail-fast behavior afterwards
-set -e
+    submit_err=$?
 
-if [[ $SUBMIT_ERR -ne 0 || -z "$NEXT_RUN" || "$NEXT_RUN" == "null" ]]; then
-    echo "[WARNING] Failed to submit next job 'snap-attach'"
-    echo "[WARNING] Continuing without triggering downstream job..."
-else
-    echo "Successfully triggered next job: $NEXT_RUN"
-fi
+    # Restore fail-fast behavior afterwards
+    set -e
+
+    if [[ $submit_err -ne 0 || "$NEXT_RUN" == "null" || -z "$NEXT_RUN" ]]; then
+        echo "[WARNING] Failed to submit next job 'snap-attach'"
+        echo "[WARNING] Continuing without triggering downstream job..."
+    else
+        echo "Successfully triggered next job: $NEXT_RUN"
+    fi
 else
     echo "RUN_ATTACH_JOB=No — downstream job trigger skipped."
 fi
-
-exit 0
-
