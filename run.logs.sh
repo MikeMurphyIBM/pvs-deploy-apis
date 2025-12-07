@@ -19,17 +19,15 @@ SCRIPT_NAME="API-DEPLOY"
 
 log_stage "Starting Job"
 
-# Exit immediately if a command exits with a non-zero status (-e)
 set -eu
 set -o pipefail
 
-trap 'log_error "Script failed during step: $CURRENT_STEP"' EXIT
+trap 'rc=$?; if [[ $rc -ne 0 ]]; then log_error "Script failed during step: $CURRENT_STEP (exit code $rc)"; fi' EXIT
 
 # -----------------------------------------------------------
 # 0. Variable Setup
 # -----------------------------------------------------------
 CURRENT_STEP="VARIABLE_INIT"
-
 log_info "Initializing execution variables..."
 
 API_KEY="${IBMCLOUD_API_KEY}"
@@ -54,17 +52,18 @@ API_VERSION="2024-02-28"
 MAX_RETRIES=15
 POLL_INTERVAL=30
 INITIAL_WAIT=120
+STATUS_POLL_LIMIT=20
+
 IAM_TOKEN=""
 INSTANCE_ID=""
-STATUS_POLL_LIMIT=20
 
 log_info "Variables loaded."
 
 # -----------------------------------------------------------
-# Auth & Targeting
+# Authentication
 # -----------------------------------------------------------
 CURRENT_STEP="AUTHENTICATION"
-log_stage "Authenticating into IBM Cloud and targeting Murphy Workspace"
+log_stage "Authenticate into IBM Cloud & Target Workspace"
 
 IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -75,33 +74,50 @@ IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
 IAM_TOKEN=$(echo "$IAM_RESPONSE" | jq -r '.access_token')
 
 if [[ -z "$IAM_TOKEN" || "$IAM_TOKEN" == "null" ]]; then
-    log_error "Unable to retrieve IAM Token – check API Key"
+    log_error "Unable to retrieve IAM token"
     exit 1
 fi
 
-log_info "IAM Token retrieved."
+log_info "IAM Token retrieved successfully."
 
-CURRENT_STEP="CLOUD_LOGIN"
-log_info "Authenticating to IBM Cloud..."
 
+log_info "Authenticating to IBM Cloud platform..."
 ibmcloud login --apikey "${API_KEY}" -r "${REGION}" -g "${RESOURCE_GROUP}" --quiet
-log_info "IBM Cloud authentication successful."
+log_info "IBM Cloud login complete."
 
-CURRENT_STEP="TARGET_WORKSPACE"
 log_info "Targeting PowerVS workspace..."
-
 ibmcloud pi ws target "${PVS_CRN}"
-log_info "Workspace targeted."
+log_info "Workspace targeted successfully."
 
 # -----------------------------------------------------------
-# LPAR CREATION
+# Create LPAR
 # -----------------------------------------------------------
-log_stage "Provision Empty LPAR"
-
 CURRENT_STEP="CREATE_LPAR"
-API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
+log_stage "Provision EMPTY LPAR"
 
-log_info "Submitting create request for LPAR: $LPAR_NAME"
+PAYLOAD=$(cat <<EOF
+{
+  "serverName": "${LPAR_NAME}",
+  "processors": ${PROCESSORS},
+  "memory": ${MEMORY_GB},
+  "procType": "${PROC_TYPE}",
+  "sysType": "${SYS_TYPE}",
+  "imageID": "${IMAGE_ID}",
+  "deploymentType": "${DEPLOYMENT_TYPE}",
+  "keyPairName": "${KEYPAIR_NAME}",
+  "networks": [
+      {
+         "networkID": "${SUBNET_ID}",
+         "ipAddress": "${Private_IP}"
+      }
+  ]
+}
+EOF
+)
+
+log_info "Submitting provisioning request to PowerVS API..."
+
+API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
 
 RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Authorization: Bearer ${IAM_TOKEN}" \
@@ -109,82 +125,82 @@ RESPONSE=$(curl -s -X POST "${API_URL}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}")
 
-INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.[].pvmInstanceID // .pvmInstanceID // .pvmInstance.pvmInstanceID')
+INSTANCE_ID=$(echo "$RESPONSE" | jq -r '.[].pvmInstanceID // .pvmInstance.pvmInstanceID')
 
-if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
-    log_error "LPAR creation failed. Capturing full API response..."
+if [[ "$INSTANCE_ID" == "null" || -z "$INSTANCE_ID" ]]; then
+    log_error "LPAR provisioning API returned failure"
     echo "$RESPONSE" >&2
     exit 1
 fi
 
-log_info "LPAR submitted successfully. Instance ID: $INSTANCE_ID"
-log_info "Waiting ${INITIAL_WAIT}s for provisioning to stabilize..."
+log_info "LPAR provisioning submitted successfully! Instance ID: $INSTANCE_ID"
+
+
+# -----------------------------------------------------------
+# EXTRA DISPLAY EVENTS YOU ASKED FOR
+# -----------------------------------------------------------
+
+sleep 15
+log_info "LPAR will be deployed into Murphy subnet with assigned private IP: $Private_IP"
+
+sleep 15
+log_info "LPAR will be provisioned with NO storage volumes attached"
+log_info "A boot image will be required to bring IBM i online later"
+
+log_info "Waiting ${INITIAL_WAIT}s for backend to initialize provisioning..."
 sleep ${INITIAL_WAIT}
 
 # -----------------------------------------------------------
-# WAIT FOR SHUTOFF
+# Poll for SHUTOFF
 # -----------------------------------------------------------
-log_stage "Polling For SHUTOFF State"
+CURRENT_STEP="WAIT_SHUTOFF"
+log_stage "Waiting for LPAR to reach SHUTOFF (Provisioned State)"
 
 STATUS=""
-POLL_ATTEMPTS=0
-RETRY_FAILURES=0
-
-CURRENT_STEP="WAIT_SHUTOFF"
+ATTEMPTS=0
 
 while [[ "$STATUS" != "SHUTOFF" ]]; do
     
-    POLL_ATTEMPTS=$((POLL_ATTEMPTS + 1))
-    if (( POLL_ATTEMPTS > STATUS_POLL_LIMIT )); then
-        log_error "Polling timeout — Instance never reached SHUTOFF"
+    ATTEMPTS=$((ATTEMPTS+1))
+    if (( ATTEMPTS > STATUS_POLL_LIMIT )); then
+        log_error "Instance did NOT reach SHUTOFF state within expected window"
         exit 1
     fi
 
-    set +e
-    STATUS_JSON=$(ibmcloud pi ins get "${LPAR_NAME}" --json 2>/dev/null)
-    EXIT_CODE=$?
-    set -e
-
-    if (( EXIT_CODE != 0 )); then
-        RETRY_FAILURES=$((RETRY_FAILURES + 1))
-        log_warn "Polling error (${RETRY_FAILURES}/${MAX_RETRIES})"
-        sleep ${POLL_INTERVAL}
-        continue
-    fi
-
+    STATUS_JSON=$(ibmcloud pi ins get "$LPAR_NAME" --json 2>/dev/null || true)
     STATUS=$(echo "$STATUS_JSON" | jq -r '.status')
-    log_info "Instance status: $STATUS"
 
-    if [[ "$STATUS" == "SHUTOFF" ]]; then
-        break
-    fi
+    log_info "Polling status → Current state: $STATUS"
+
+    [[ "$STATUS" == "SHUTOFF" ]] && break
 
     sleep $POLL_INTERVAL
 done
 
-log_info "LPAR reached required SHUTOFF state."
+log_info "LPAR reached SHUTOFF provisioning state"
 
 # -----------------------------------------------------------
-# FINAL SUCCESS BLOCK
+# Completion
 # -----------------------------------------------------------
-log_stage "Complete – Provision Success"
+CURRENT_STEP="COMPLETE"
 
-log_info "LPAR ${LPAR_NAME} created successfully and is SHUTOFF."
+log_stage "Provision Success"
+log_info "LPAR $LPAR_NAME provisioned & system shutoff successfully"
 
 # -----------------------------------------------------------
-# NEXT JOB LAUNCH
+# Trigger Next Job
 # -----------------------------------------------------------
-log_stage "Submit Next Job?"
+log_stage "Trigger Next Job?"
 
 if [[ "${RUN_CLONE_JOB:-No}" == "Yes" ]]; then
+    log_info "Submitting next Code Engine job: snap-clone-attach-deploy"
     
-    log_info "Launching job: snap-attach..."
-    NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-attach --output json | jq -r '.name')
-    
-    log_info "Submitted next job: $NEXT_RUN"
+    NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-clone-attach-deploy --output json | jq -r '.name')
+
+    log_info "Submitted follow-up job instance: $NEXT_RUN"
 else
-    log_info "Skipping next stage – RUN_CLONE_JOB is set to No"
+    log_info "Skipping downstream deployment — RUN_CLONE_JOB set to No"
 fi
 
-log_stage "Job Completed"
+log_stage "Job Completed Successfully"
 exit 0
