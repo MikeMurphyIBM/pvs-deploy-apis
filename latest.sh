@@ -18,7 +18,7 @@ rollback() {
 
     if [[ -n "${INSTANCE_ID:-}" ]]; then
         echo "Attempting cleanup of partially created LPAR: ${LPAR_NAME}"
-        ibmcloud pi ins delete "$LPAR_NAME" --force || echo "Cleanup attempt failed—manual cleanup may be required."
+        ibmcloud pi ins delete "$LPAR_NAME" || echo "Cleanup attempt failed—manual cleanup may be required."
     fi
 
     echo "Rollback complete. Exiting with failure."
