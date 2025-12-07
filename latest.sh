@@ -202,8 +202,8 @@ echo "STEP: Evaluate triggering next Code Engine job..."
 
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     
-    echo "Targeting CE Project: snap-clone-attach-deploy"
-    ibmcloud ce project select --name snap-clone-attach-deploy --output json >/dev/null
+    echo "Targeting CE Project: IBMi"
+    ibmcloud ce project select --name IBMi --output json >/dev/null
     
     echo "Submitting snap-attach job run..."
     NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-attach --output json | jq -r '.name')
