@@ -16,11 +16,11 @@ RUN curl -fsSL https://clis.cloud.ibm.com/install/linux | bash
 RUN ibmcloud plugin install power-iaas -f
 
 # Copy your script
-COPY run.sh /run.sh
+COPY run.logs.sh /run.sh
 
 # Ensure Unix line endings + executable flag
-RUN sed -i 's/\r$//' /run.sh && chmod +x /run.sh
+RUN sed -i 's/\r$//' /run.logs.sh && chmod +x /run.logs.sh
 
 # Default command
-CMD ["/run.sh"]
+CMD ["/run.logs.sh"]
 
