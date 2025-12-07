@@ -5,23 +5,30 @@ FROM alpine:3.19
 RUN apk update && \
     apk add --no-cache bash curl jq openssl py3-pip python3
 
-# ---Install IBM Cloud CLI ---
+# --- Install IBM Cloud CLI ---
 RUN curl -fsSL https://clis.cloud.ibm.com/install/linux | bash
 
-# Ensure ibmcloud command is available in PATH
+# Ensure ibmcloud command is visible
 ENV PATH="/root/.bluemix:$PATH"
 
-# ---Install Power Virtual Server Plug-in ---
+# -----------------------------------------------------------
+# Install required IBM Cloud plugins
+# -----------------------------------------------------------
+
+# 1. Initialize plugin repositories
+RUN ibmcloud plugin repo-plugins
+
+# 2. Install Power Virtual Server plugin
 RUN ibmcloud plugin install power-iaas -f
 
-# ---Install Code Engine Plugin ---
+# 3. Install Code Engine CLI plugin
 RUN ibmcloud plugin install code-engine -f
 
-# Copy script into container
+# -----------------------------------------------------------
+# Copy and prepare job script
+# -----------------------------------------------------------
 COPY run.logs.sh /run.logs.sh
 
-# Make executable
 RUN sed -i 's/\r$//' /run.logs.sh && chmod +x /run.logs.sh
 
-# Default execution command
 CMD ["/run.logs.sh"]
