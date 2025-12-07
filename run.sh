@@ -1,5 +1,11 @@
 #!/bin/bash
 
+echo "==============================="
+echo " Job Stage: API-Deploy"
+echo " Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "==============================="
+
+
 # Configuration: Exit immediately if a command exits with a non-zero status (-e)
 # and exit on unbound variables (-u).
 set -eu
@@ -211,17 +217,14 @@ echo ""
 echo "--- Evaluating whether next Code Engine job should run ---"
 
 # RUN_ATTACH_JOB must be set as Yes or No in Code Engine environment variables
-if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
-    echo "RUN_ATTACH_JOB=Yes — launching job: snap-clone-attach-deploy"
+if [[ "${RUN_CLONE_JOB:-No}" == "Yes" ]]; then
+    echo "Submitting next job: snap-clone-attach-deploy"
+    
+    NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-clone-attach-deploy --output json | jq -r '.name')
 
-    # Trigger the next job asynchronously
-    ibmcloud ce jobrun submit --job snap-clone-attach-deploy || {
-        echo "ERROR: Failed to trigger snap-clone-attach-deploy job"
-        exit 10
-    }
-
+    echo "Triggered job instance: $NEXT_RUN"
 else
-    echo "RUN_ATTACH_JOB=No — skipping snap-clone-attach-deploy"
+    echo "Skipping clone/attach stage."
 fi
 
 
