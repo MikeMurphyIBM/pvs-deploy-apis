@@ -177,22 +177,6 @@ done
 
 echo "SUCCESS: LPAR reached SHUTOFF state."
 
-# ----------------------------------------------------------------
-# Completion Summary
-# ----------------------------------------------------------------
-
-echo ""
-echo "==========================="
-echo " JOB COMPLETED SUCCESSFULLY"
-echo "==========================="
-echo "LPAR Name         : ${LPAR_NAME}"
-echo "Final Status      : SHUTOFF"
-echo "Private IP        : ${Private_IP}"
-echo "Subnet Assigned   : ${SUBNET_ID}"
-echo "Storage Attached  : NO"
-echo "Next Job Enabled  : ${RUN_ATTACH_JOB:-No}"
-echo "==========================="
-echo ""
 
 # ----------------------------------------------------------------
 # Trigger Next Job
@@ -225,7 +209,22 @@ else
     echo "RUN_ATTACH_JOB=No — downstream job trigger skipped."
 fi
 
+# ----------------------------------------------------------------
+# Completion Summary
+# ----------------------------------------------------------------
 
+echo ""
+echo "==========================="
+echo " JOB COMPLETED SUCCESSFULLY"
+echo "==========================="
+echo "LPAR Name         : ${LPAR_NAME}"
+echo "Final Status      : SHUTOFF"
+echo "Private IP        : ${Private_IP}"
+echo "Subnet Assigned   : ${SUBNET_ID}"
+echo "Storage Attached  : NO"
+echo "Next Job Enabled  : ${RUN_ATTACH_JOB:-No}"
+echo "==========================="
+echo ""
 
 echo "[API-DEPLOY] Job Completed Successfully"
 echo "[API-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
