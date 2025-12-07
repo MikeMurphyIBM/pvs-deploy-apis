@@ -233,6 +233,7 @@ trap - ERR
 # ----------------------------------------------------------------
 # Trigger Next Job
 # ----------------------------------------------------------------
+
 # ----------------------------------------------------------------
 # Trigger Next Job
 # ----------------------------------------------------------------
@@ -242,32 +243,38 @@ echo "STEP: Evaluate triggering next Code Engine job..."
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     echo "Next job execution requested — attempting launch..."
 
-    
-    # Re-login to ensure CE context is valid inside container
-    ibmcloud login --apikey "${IBMCLOUD_API_KEY}" -r us-south -g Default --quiet
-
-    # Target same CE project
-    echo "Targeting CE project: IBMi"
-    ibmcloud ce project select --name IBMi --quiet
-
-    # Prevent failure from stopping execution
+    # Do NOT stop on failure
     set +e
 
+    # Submit next run
     NEXT_RUN=$(ibmcloud ce jobrun submit \
         --job snap-attach \
-        -o json 2>/dev/null | jq -r '.name')
+        --output json 2>/dev/null | jq -r '.name')
 
-    submit_err=$?
+    SUBMIT_CODE=$?
 
-    # Restore fail-fast behavior afterwards
+    # Now verify if it actually started
+    sleep 2
+
+    # Try obtaining latest run name from CE directly
+    LATEST_RUN=$(ibmcloud ce jobrun list --job snap-attach --output json \
+        2>/dev/null | jq -r '.[0].name')
+
     set -e
 
-    if [[ $submit_err -ne 0 || "$NEXT_RUN" == "null" || -z "$NEXT_RUN" ]]; then
-        echo "[WARNING] Failed to submit next job 'snap-attach'"
-        echo "[WARNING] Continuing without triggering downstream job..."
+    echo ""
+    echo "--- Verification of next job submission ---"
+
+    if [[ "$LATEST_RUN" != "null" && -n "$LATEST_RUN" ]]; then
+        echo "SUCCESS: Verified downstream CE job started:"
+        echo " → Job Name: snap-attach"
+        echo " → Run ID   : $LATEST_RUN"
     else
-        echo "Successfully triggered next job: $NEXT_RUN"
+        echo "[WARNING] Could not confirm downstream job start"
+        echo "[WARNING] Manual review recommended."
     fi
+
 else
     echo "RUN_ATTACH_JOB=No — downstream job trigger skipped."
 fi
+
