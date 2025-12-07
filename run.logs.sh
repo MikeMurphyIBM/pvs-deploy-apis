@@ -51,8 +51,8 @@ DEPLOYMENT_TYPE="VMNoStorage"
 
 API_VERSION="2024-02-28"
 
-MAX_RETRIES=4
-POLL_INTERVAL=45
+MAX_RETRIES=15
+POLL_INTERVAL=30
 INITIAL_WAIT=120
 IAM_TOKEN=""
 INSTANCE_ID=""
@@ -64,7 +64,7 @@ log_info "Variables loaded."
 # Auth & Targeting
 # -----------------------------------------------------------
 CURRENT_STEP="AUTHENTICATION"
-log_stage "Authentication"
+log_stage "Authenticating into IBM Cloud and targeting Murphy Workspace"
 
 IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -178,8 +178,8 @@ log_stage "Submit Next Job?"
 
 if [[ "${RUN_CLONE_JOB:-No}" == "Yes" ]]; then
     
-    log_info "Launching job: snap-clone-attach-deploy..."
-    NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-clone-attach-deploy --output json | jq -r '.name')
+    log_info "Launching job: snap-attach..."
+    NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-attach --output json | jq -r '.name')
     
     log_info "Submitted next job: $NEXT_RUN"
 else
