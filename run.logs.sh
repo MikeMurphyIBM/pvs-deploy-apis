@@ -141,7 +141,7 @@ log_info "LPAR provisioning submitted successfully! Instance ID: $INSTANCE_ID"
 # -----------------------------------------------------------
 
 sleep 15
-log_info "LPAR will be deployed into Murphy subnet with assigned private IP: $Private_IP"
+log_info "LPAR will be deployed into existing subnet with assigned private IP: $Private_IP"
 
 sleep 15
 log_info "LPAR will be provisioned with NO storage volumes attached"
