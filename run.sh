@@ -227,5 +227,8 @@ else
     echo "Skipping clone/attach stage."
 fi
 
+echo "[API-DEPLOY] Job Completed Successfully"
+echo "[API-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
 
 exit 0
