@@ -18,7 +18,7 @@ rollback() {
 
     if [[ -n "${INSTANCE_ID:-}" ]]; then
         echo "Attempting cleanup of partially created LPAR: ${LPAR_NAME}"
-        ibmcloud pi ins delete "$LPAR_NAME" -f || echo "Cleanup attempt failed—manual cleanup may be required."
+        ibmcloud pi ins delete "$LPAR_NAME" --force || echo "Cleanup attempt failed—manual cleanup may be required."
     fi
 
     echo "Rollback complete. Exiting with failure."
@@ -179,37 +179,6 @@ echo "SUCCESS: LPAR reached SHUTOFF state."
 
 
 # ----------------------------------------------------------------
-# Trigger Next Job
-# ----------------------------------------------------------------
-CURRENT_STEP="SUBMIT_NEXT_JOB"
-echo "STEP: Evaluate triggering next Code Engine job..."
-
-if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
-    echo "Next job execution requested — attempting launch..."
-
-    # Prevent failure from stopping execution
-    set +e
-
-    NEXT_RUN=$(ibmcloud ce jobrun submit \
-        --job snap-attach \
-        -o json 2>/dev/null | jq -r '.name')
-
-    EXIT_CODE=$?
-
-    # Restore fail-fast behavior afterwards
-    set -e
-
-    if [[ $EXIT_CODE -ne 0 || "$NEXT_RUN" == "null" || -z "$NEXT_RUN" ]]; then
-        echo "[WARNING] Failed to submit next job 'snap-attach'"
-        echo "[WARNING] Continuing without triggering downstream job..."
-    else
-        echo "Successfully triggered next job: $NEXT_RUN"
-    fi
-else
-    echo "RUN_ATTACH_JOB=No — downstream job trigger skipped."
-fi
-
-# ----------------------------------------------------------------
 # Completion Summary
 # ----------------------------------------------------------------
 
@@ -229,4 +198,40 @@ echo ""
 echo "[API-DEPLOY] Job Completed Successfully"
 echo "[API-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
+
+
+# ----------------------------------------------------------------
+# Trigger Next Job
+# ----------------------------------------------------------------
+CURRENT_STEP="SUBMIT_NEXT_JOB"
+echo "STEP: Evaluate triggering next Code Engine job..."
+
+if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
+    echo "Next job execution requested — attempting launch..."
+
+# Prevent failure from stopping execution
+set +e
+
+RAW_RESPONSE=$(ibmcloud ce jobrun submit \
+    --job snap-attach \
+    -o json 2>/dev/null)
+
+SUBMIT_ERR=${PIPESTATUS[0]}   # captures ibmcloud command exit code
+
+NEXT_RUN=$(echo "$RAW_RESPONSE" | jq -r '.name' 2>/dev/null)
+
+# Restore fail-fast behavior afterwards
+set -e
+
+if [[ $SUBMIT_ERR -ne 0 || -z "$NEXT_RUN" || "$NEXT_RUN" == "null" ]]; then
+    echo "[WARNING] Failed to submit next job 'snap-attach'"
+    echo "[WARNING] Continuing without triggering downstream job..."
+else
+    echo "Successfully triggered next job: $NEXT_RUN"
+fi
+else
+    echo "RUN_ATTACH_JOB=No — downstream job trigger skipped."
+fi
+
 exit 0
+
