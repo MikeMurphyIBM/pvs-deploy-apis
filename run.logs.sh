@@ -210,7 +210,7 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     CURRENT_STEP="TARGET_NEXT_PROJECT"
     log_info "Selecting deployment project: snap-clone-attach-deploy"
 
-    ibmcloud ce project select --name snap-clone-attach-deploy --quiet
+    ibmcloud code-engine project select --name snap-clone-attach-deploy --quiet
     if [[ $? -ne 0 ]]; then
         log_error "Unable to select project snap-clone-attach-deploy"
         exit 1
