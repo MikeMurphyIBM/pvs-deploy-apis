@@ -195,9 +195,15 @@ echo "Next Job Enabled  : ${RUN_ATTACH_JOB:-No}"
 echo "==========================="
 echo ""
 
-echo "[API-DEPLOY] Job Completed Successfully"
-echo "[API-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "[EMPTY-DEPLOY] Job Completed Successfully"
+echo "[EMPTY-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
+
+# ---------------------------------------------------------
+# DISARM FAILURE TRAP — prevents rollback after success
+# ---------------------------------------------------------
+trap - EXIT
+trap - ERR
 
 
 # ----------------------------------------------------------------
