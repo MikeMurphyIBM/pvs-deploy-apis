@@ -1,26 +1,27 @@
 # Use Alpine Linux (small base image)
 FROM alpine:3.19
 
-# Install required tools (bash, curl, jq) PLUS dependencies needed for the IBM Cloud CLI.
-# Note: We include 'python3' and remove the problematic 'pip install --upgrade pip' from this single RUN step 
-# to ensure apk commands succeed cleanly.
+# Install required tools and IBM Cloud CLI dependencies
 RUN apk update && \
     apk add --no-cache bash curl jq openssl py3-pip python3
 
-# ---Install Core IBM Cloud CLI ---
-# The core IBM Cloud CLI is necessary for the 'ibmcloud' prefix 
+# ---Install IBM Cloud CLI ---
 RUN curl -fsSL https://clis.cloud.ibm.com/install/linux | bash
 
+# Ensure ibmcloud command is available in PATH
+ENV PATH="/root/.bluemix:$PATH"
+
 # ---Install Power Virtual Server Plug-in ---
-# The 'power-iaas' plugin is required to use 'ibmcloud pi' commands like 'instance get'
 RUN ibmcloud plugin install power-iaas -f
 
-# Copy your script
+# ---Install Code Engine Plugin ---
+RUN ibmcloud plugin install code-engine -f
+
+# Copy script into container
 COPY run.logs.sh /run.logs.sh
 
-# Ensure Unix line endings + executable flag
+# Make executable
 RUN sed -i 's/\r$//' /run.logs.sh && chmod +x /run.logs.sh
 
-# Default command
+# Default execution command
 CMD ["/run.logs.sh"]
-
