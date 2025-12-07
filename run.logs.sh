@@ -190,17 +190,47 @@ log_info "LPAR $LPAR_NAME provisioned & system shutoff successfully"
 # -----------------------------------------------------------
 # Trigger Next Job
 # -----------------------------------------------------------
-log_stage "Trigger Next Job?"
+
+# -----------------------------------------------------------
+# NEXT JOB LAUNCH
+# -----------------------------------------------------------
+log_stage "Trigger Next Code Engine Job"
 
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
+
+    CURRENT_STEP="LOGIN_FOR_NEXT_JOB"
+    log_info "Logging back into IBM Cloud for downstream deployment..."
+
+    ibmcloud login --apikey "${API_KEY}" -r us-south -g Default --quiet
+    if [[ $? -ne 0 ]]; then
+        log_error "Unable to authenticate for next job submission."
+        exit 1
+    fi
+
+    CURRENT_STEP="TARGET_NEXT_PROJECT"
+    log_info "Selecting deployment project: snap-clone-attach-deploy"
+
+    ibmcloud ce project select --name snap-clone-attach-deploy --quiet
+    if [[ $? -ne 0 ]]; then
+        log_error "Unable to select project snap-clone-attach-deploy"
+        exit 1
+    fi
+
+    CURRENT_STEP="SUBMIT_NEXT_JOB"
     log_info "Submitting next Code Engine job: snap-attach"
-    
-    NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-attach --output json | jq -r '.name')
 
-    log_info "Submitted follow-up job instance: $NEXT_RUN"
-else
-    log_info "Skipping downstream deployment — RUN_CLONE_JOB set to No"
-fi
+    NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-attach --output json 2>/dev/null | jq -r '.name')
 
-log_stage "Job Completed Successfully"
-exit 0
+    if [[ -z "$NEXT_RUN" || "$NEXT_RUN" == "null" ]]; then
+        log_error "Next job submission failed"
+        exit 1
+    fi
+
+        log_info "Follow-up job submitted successfully: $NEXT_RUN"
+
+    else
+        log_info "Skipping downstream deployment — RUN_ATTACH_JOB=No"
+    fi
+
+l    og_stage "Job Completed Successfully"
+    exit 0
