@@ -192,10 +192,10 @@ log_info "LPAR $LPAR_NAME provisioned & system shutoff successfully"
 # -----------------------------------------------------------
 log_stage "Trigger Next Job?"
 
-if [[ "${RUN_CLONE_JOB:-No}" == "Yes" ]]; then
-    log_info "Submitting next Code Engine job: snap-clone-attach-deploy"
+if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
+    log_info "Submitting next Code Engine job: snap-attach"
     
-    NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-clone-attach-deploy --output json | jq -r '.name')
+    NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-attach --output json | jq -r '.name')
 
     log_info "Submitted follow-up job instance: $NEXT_RUN"
 else
