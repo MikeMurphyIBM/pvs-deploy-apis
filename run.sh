@@ -217,13 +217,17 @@ echo ""
 echo "--- Evaluating whether next Code Engine job should run ---"
 
 # RUN_ATTACH_JOB must be set as Yes or No in Code Engine environment variables
-if [[ "${RUN_CLONE_JOB:-No}" == "Yes" ]]; then
+# The CE Project for Job #2 is "snap-clone-attach-deploy"and the Job is "snap-attach"
+# Remember we have to likely re-authenticate and target the Job #2 CE Project in order to run the command below
+
+if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     echo "Submitting next job: snap-clone-attach-deploy"
     
     NEXT_RUN=$(ibmcloud ce jobrun submit --job snap-clone-attach-deploy --output json | jq -r '.name')
 
     echo "Triggered job instance: $NEXT_RUN"
 else
+    #there is no reason to have this here, we would never skip it....we just wouldnt go t oit
     echo "Skipping clone/attach stage."
 fi
 
