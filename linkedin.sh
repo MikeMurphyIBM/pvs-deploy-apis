@@ -6,7 +6,7 @@ echo "[EMPTY-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 echo "[EMPTY-DEPLOY] ==============================="
 
 echo "====================================================================="
-echo "Job 1:  Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
+echo "Job 1:  Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations" #print
 echo "====================================================================="
 
 set -eu
@@ -62,7 +62,7 @@ STATUS_POLL_LIMIT=20
 echo "Variables loaded successfully."
 
 #--------------------------------------------------------------
-echo "Stage 1 of 3:  IBM Cloud Authentication"
+echo "Stage 1 of 3:  IBM Cloud Authentication and Login" #print
 #--------------------------------------------------------------
 
 CURRENT_STEP="AUTH_TOKEN_RETRIEVAL"
@@ -79,31 +79,31 @@ if [[ -z "$IAM_TOKEN" || "$IAM_TOKEN" == "null" ]]; then
     exit 1
 fi
 
-echo "Stage 1 of 3 Complete, Successfully authenticated into IBM Cloud"
 
 #-----------------------------------------------------------------
 #IBM Cloud Login
 # ----------------------------------------------------------------
 CURRENT_STEP="IBM_CLOUD_LOGIN"
-echo "STEP: Logging into IBM Cloud..."
+echo "STEP: Logging into IBM Cloud..." #print
 ibmcloud login --apikey "${API_KEY}" -r "${REGION}" -g "${RESOURCE_GROUP}" --quiet
-echo "SUCCESS: IBM Cloud login completed."
+
+echo "Stage 1 of 3 Complete, Successfully authenticated and logged into IBM Cloud" #print
 
 # ----------------------------------------------------------------
-echo "Stage 2 of 3: Target PowerVS Workspace"
+echo "Stage 2 of 3: Target PowerVS Workspace" #print
 # ----------------------------------------------------------------
 CURRENT_STEP="TARGET_PVS_WORKSPACE"
-echo "STEP: Targeting Power Virtual Server workspace..."
+echo "STEP: Targeting Power Virtual Server workspace..." #print
 ibmcloud pi ws target "${PVS_CRN}"
-echo "Stage 2 of 3 Complete, PowerVS Workspace targeted for deployment"
+echo "Stage 2 of 3 Complete, PowerVS Workspace targeted for deployment" #print
 
 
 # ----------------------------------------------------------------
-echo "Stage 3 of 3: Create Empty IBMi LPAR in defined Subnet w/PrivateIP"
+echo "Stage 3 of 3: Create Empty IBMi LPAR in defined Subnet w/PrivateIP" #print
 # ----------------------------------------------------------------
 
 CURRENT_STEP="CREATE_LPAR"
-echo "STEP: Submitting LPAR create request..."
+echo "STEP: Submitting LPAR create request..." #print
 
 PAYLOAD=$(cat <<EOF
 {
@@ -206,7 +206,7 @@ while [[ "$STATUS" != "SHUTOFF" ]]; do
     sleep $POLL_INTERVAL
 done
 
-echo "Stage 3 of 3 Complete, IBMi partition is ready for Snapshot/Clone Operations"
+echo "Stage 3 of 3 Complete, IBMi partition is ready for Snapshot/Clone Operations" #print
 
 
 # ----------------------------------------------------------------
@@ -215,19 +215,19 @@ echo "Stage 3 of 3 Complete, IBMi partition is ready for Snapshot/Clone Operatio
 
 echo ""
 echo "==========================="
-echo " JOB COMPLETED SUCCESSFULLY"
+echo " JOB COMPLETED SUCCESSFULLY" #print
 echo "==========================="
-echo "LPAR Name         : ${LPAR_NAME}"
-echo "Final Status      : SHUTOFF"
-echo "Private IP        : ${Private_IP}"
-echo "Subnet Assigned   : ${SUBNET_ID}"
-echo "Storage Attached  : NO"
-echo "Next Job Enabled  : ${RUN_ATTACH_JOB:-No}"
+echo "LPAR Name         : ${LPAR_NAME}"#print
+echo "Final Status      : SHUTOFF"#print
+echo "Private IP        : ${Private_IP}"#print
+echo "Subnet Assigned   : ${SUBNET_ID}"#print
+echo "Storage Attached  : NO"#print
+echo "Next Job Enabled  : ${RUN_ATTACH_JOB:-No}"#print
 echo "==========================="
 echo ""
 
-echo "[EMPTY-DEPLOY] Job Completed Successfully"
-echo "[EMPTY-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "[EMPTY-DEPLOY] Job Completed Successfully"#print
+echo "[EMPTY-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"#print
 
 
 # ---------------------------------------------------------
@@ -248,7 +248,7 @@ CURRENT_STEP="SUBMIT_NEXT_JOB"
 echo "STEP: Evaluate triggering next Code Engine job..."
 
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
-    echo "Next job execution requested — attempting launch..."
+    echo "Next job execution requested — attempting launch..."#print
 
     # Do NOT stop on failure
     set +e
