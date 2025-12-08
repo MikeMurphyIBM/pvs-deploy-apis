@@ -1,3 +1,5 @@
+NO GOOD
+
 #!/bin/bash
 
 # ======== PRINT FUNCTION ========
