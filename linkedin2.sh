@@ -9,14 +9,15 @@ log_print() {
 }
 # ================================
 
-echo "[EMPTY-DEPLOY] ==============================="
-echo "[EMPTY-DEPLOY] Job Stage Started"
-echo "[EMPTY-DEPLOY] Timestamp:"
-echo "[EMPTY-DEPLOY] ==============================="
+echo " ==============================="
+echo " Job Stage Started"
+echo " Timestamp:"
+echo " ==============================="
 
 log_print "============================================================================"
 log_print "Job 1: Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
 log_print "============================================================================"
+log_print ""
 
 set -eu
 
@@ -69,10 +70,11 @@ INITIAL_WAIT=120
 STATUS_POLL_LIMIT=20
 
 echo "Variables loaded successfully."
-
-#--------------------------------------------------------------
+ 
+log_print "============================================================================"
 log_print "Stage 1 of 3: IBM Cloud Authentication and Login"
-#--------------------------------------------------------------
+log_print "============================================================================"
+log_print ""
 
 CURRENT_STEP="AUTH_TOKEN_RETRIEVAL"
 log_print  "STEP: Retrieving IAM access token..."
@@ -98,6 +100,7 @@ log_print "Stage 1 of 3 Complete: Successfully authenticated and logged into IBM
 log_print "=================================================================="
 log_print "Stage 2 of 3: Target PowerVS Workspace"
 log_print "=================================================================="
+log_print ""
 
 CURRENT_STEP="TARGET_PVS_WORKSPACE"
 log_print "STEP: Targeting Power Virtual Server workspace..."
@@ -107,6 +110,7 @@ log_print "Stage 2 of 3 Complete: PowerVS Workspace targeted for deployment"
 log_print "=================================================================="
 log_print "Stage 3 of 3: Create Empty IBMi LPAR in defined Subnet w/PrivateIP"
 log_print "=================================================================="
+log_print ""
 
 CURRENT_STEP="CREATE_LPAR"
 log_print "STEP: Submitting LPAR create request..."
@@ -171,6 +175,7 @@ log_print "****Private IP: ${Private_IP}****"
 log_print "****Subnet Assigned: ${SUBNET_ID}****"
 log_print "****Storage Attached: NO****"
 echo "Next Job Enabled: ${RUN_ATTACH_JOB:-No}"
+log_print ""
 
 log_print "Job Completed Successfully"
 echo "Timestamp:"
@@ -187,7 +192,7 @@ CURRENT_STEP="SUBMIT_NEXT_JOB"
 echo "STEP: Evaluate triggering next Code Engine job..."
 
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
-    log_print "Next job execution requested — attempting launch..."
+    echo "Next job execution requested — attempting launch..."
 
     set +e
     NEXT_RUN=$(ibmcloud ce jobrun submit \
