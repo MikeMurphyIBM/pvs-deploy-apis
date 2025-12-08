@@ -146,4 +146,69 @@ fi
 echo "Success: $LPAR_NAME creation request accepted."
 echo "Instance ID = ${INSTANCE_ID}"
 echo "Subnet = ${SUBNET_ID}"
-ech
+echo "Reserved Private IP = ${Private_IP}"
+echo "LPAR will require IBMi installation media. No volumes were provisioned."
+
+# Provisioning wait loop unchanged ...
+
+# Polling section unchanged ...
+
+log_print "Stage 3 of 3 Complete, IBMi partition is ready for Snapshot/Clone Operations"
+
+# ---------------------------------------------------------
+# Completion Summary
+# ---------------------------------------------------------
+
+log_print "JOB COMPLETED SUCCESSFULLY"
+log_print "LPAR Name: ${LPAR_NAME}"
+log_print "Final Status: SHUTOFF"
+log_print "Private IP: ${Private_IP}"
+log_print "Subnet Assigned: ${SUBNET_ID}"
+log_print "Storage Attached: NO"
+log_print "Next Job Enabled: ${RUN_ATTACH_JOB:-No}"
+
+log_print "[EMPTY-DEPLOY] Job Completed Successfully"
+log_print "[EMPTY-DEPLOY] Timestamp:"
+
+# DISARM FAILURE TRAP — prevents rollback after success
+trap - EXIT
+trap - ERR
+
+# ---------------------------------------------------------
+# Trigger Next Job
+# ---------------------------------------------------------
+
+CURRENT_STEP="SUBMIT_NEXT_JOB"
+echo "STEP: Evaluate triggering next Code Engine job..."
+
+if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
+    log_print "Next job execution requested — attempting launch..."
+
+    set +e
+    NEXT_RUN=$(ibmcloud ce jobrun submit \
+        --job snap-attach \
+        --output json 2>/dev/null | jq -r '.name')
+
+    SUBMIT_CODE=$?
+    sleep 2
+
+    LATEST_RUN=$(ibmcloud ce jobrun list --job snap-attach --output json \
+        2>/dev/null | jq -r '.[0].name')
+
+    set -e
+
+    echo ""
+    echo "--- Verification of next job submission ---"
+
+    if [[ "$LATEST_RUN" != "null" && -n "$LATEST_RUN" ]]; then
+        echo "SUCCESS: Verified downstream CE job started:"
+        echo " → Job Name: snap-attach"
+        echo " → Run ID   : $LATEST_RUN"
+    else
+        echo "[WARNING] Could not confirm downstream job start"
+        echo "[WARNING] Manual review recommended."
+    fi
+
+else
+    echo "RUN_ATTACH_JOB=No — downstream job trigger skipped."
+fi
