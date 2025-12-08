@@ -2,7 +2,7 @@
 
 echo "[EMPTY-DEPLOY] ==============================="
 echo "[EMPTY-DEPLOY] Job Stage Started"
-echo "[EMPTY-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "[EMPTY-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"#print
 echo "[EMPTY-DEPLOY] ==============================="
 
 echo "====================================================================="
