@@ -1,19 +1,22 @@
 #!/bin/bash
 
+exec >/dev/null
+
+
 # ======== PRINT FUNCTION ========
 log_print() {
-    printf "[%s] %s\n" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$1"
+    printf "[%s] %s\n" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$1" >&2
 }
 # ================================
 
 echo "[EMPTY-DEPLOY] ==============================="
 echo "[EMPTY-DEPLOY] Job Stage Started"
-log_print "[EMPTY-DEPLOY] Timestamp:"
+echo "[EMPTY-DEPLOY] Timestamp:"
 echo "[EMPTY-DEPLOY] ==============================="
 
-echo "====================================================================="
+log_print "============================================================================"
 log_print "Job 1: Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
-echo "====================================================================="
+log_print "============================================================================"
 
 set -eu
 
@@ -72,7 +75,7 @@ log_print "Stage 1 of 3: IBM Cloud Authentication and Login"
 #--------------------------------------------------------------
 
 CURRENT_STEP="AUTH_TOKEN_RETRIEVAL"
-echo "STEP: Retrieving IAM access token..."
+log_print  "STEP: Retrieving IAM access token..."
 IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=urn:ibm:params:oauth:grant-type:apikey" \
@@ -90,19 +93,20 @@ CURRENT_STEP="IBM_CLOUD_LOGIN"
 log_print "STEP: Logging into IBM Cloud..."
 ibmcloud login --apikey "${API_KEY}" -r "${REGION}" -g "${RESOURCE_GROUP}" --quiet
 
-log_print "Stage 1 of 3 Complete, Successfully authenticated and logged into IBM Cloud"
+log_print "Stage 1 of 3 Complete: Successfully authenticated and logged into IBM Cloud"
 
-# ----------------------------------------------------------------
+log_print "=================================================================="
 log_print "Stage 2 of 3: Target PowerVS Workspace"
-# ----------------------------------------------------------------
+log_print "=================================================================="
+
 CURRENT_STEP="TARGET_PVS_WORKSPACE"
 log_print "STEP: Targeting Power Virtual Server workspace..."
 ibmcloud pi ws target "${PVS_CRN}"
-log_print "Stage 2 of 3 Complete, PowerVS Workspace targeted for deployment"
+log_print "Stage 2 of 3 Complete: PowerVS Workspace targeted for deployment"
 
-# ----------------------------------------------------------------
+log_print "=================================================================="
 log_print "Stage 3 of 3: Create Empty IBMi LPAR in defined Subnet w/PrivateIP"
-# ----------------------------------------------------------------
+log_print "=================================================================="
 
 CURRENT_STEP="CREATE_LPAR"
 log_print "STEP: Submitting LPAR create request..."
@@ -143,7 +147,7 @@ if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
     exit 1
 fi
 
-echo "Success: $LPAR_NAME creation request accepted."
+log_print "Success: $LPAR_NAME creation request accepted."
 echo "Instance ID = ${INSTANCE_ID}"
 echo "Subnet = ${SUBNET_ID}"
 echo "Reserved Private IP = ${Private_IP}"
@@ -153,22 +157,23 @@ echo "LPAR will require IBMi installation media. No volumes were provisioned."
 
 # Polling section unchanged ...
 
-log_print "Stage 3 of 3 Complete, IBMi partition is ready for Snapshot/Clone Operations"
+log_print "Stage 3 of 3 Complete: IBMi partition is ready for Snapshot/Clone Operations"
 
 # ---------------------------------------------------------
 # Completion Summary
 # ---------------------------------------------------------
 
-log_print "JOB COMPLETED SUCCESSFULLY"
-log_print "LPAR Name: ${LPAR_NAME}"
-log_print "Final Status: SHUTOFF"
-log_print "Private IP: ${Private_IP}"
-log_print "Subnet Assigned: ${SUBNET_ID}"
-log_print "Storage Attached: NO"
-log_print "Next Job Enabled: ${RUN_ATTACH_JOB:-No}"
+log_print "===================================="
+log_print "****JOB COMPLETED SUCCESSFULLY****"
+log_print "****LPAR Name: ${LPAR_NAME}****"
+log_print "****Final Status: SHUTOFF****"
+log_print "****Private IP: ${Private_IP}****"
+log_print "****Subnet Assigned: ${SUBNET_ID}****"
+log_print "****Storage Attached: NO****"
+echo "Next Job Enabled: ${RUN_ATTACH_JOB:-No}"
 
-log_print "[EMPTY-DEPLOY] Job Completed Successfully"
-log_print "[EMPTY-DEPLOY] Timestamp:"
+log_print "Job Completed Successfully"
+echo "Timestamp:"
 
 # DISARM FAILURE TRAP — prevents rollback after success
 trap - EXIT
