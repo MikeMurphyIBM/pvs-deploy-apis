@@ -62,7 +62,7 @@ STATUS_POLL_LIMIT=20
 echo "Variables loaded successfully."
 
 #--------------------------------------------------------------
-echo "Step 1 of 3:  IBM Cloud Authentication"
+echo "Stage 1 of 3:  IBM Cloud Authentication"
 #--------------------------------------------------------------
 
 CURRENT_STEP="AUTH_TOKEN_RETRIEVAL"
@@ -79,7 +79,7 @@ if [[ -z "$IAM_TOKEN" || "$IAM_TOKEN" == "null" ]]; then
     exit 1
 fi
 
-echo "Step 1 of 3 Complete, Successfully authenticated into IBM Cloud"
+echo "Stage 1 of 3 Complete, Successfully authenticated into IBM Cloud"
 
 #-----------------------------------------------------------------
 #IBM Cloud Login
