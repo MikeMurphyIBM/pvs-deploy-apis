@@ -6,7 +6,7 @@ echo "[EMPTY-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 echo "[EMPTY-DEPLOY] ==============================="
 
 echo "====================================================================="
-echo "Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
+echo "Job 1:  Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
 echo "====================================================================="
 
 set -eu
@@ -15,7 +15,7 @@ set -eu
 # Rollback Function
 # ----------------------------------------------------------------
 rollback() {
-    echo "===================================================="
+    echo "====================================================" 
     echo "ROLLBACK EVENT INITIATED"
     echo "An error occurred in step: $CURRENT_STEP"
     echo "----------------------------------------------------"
