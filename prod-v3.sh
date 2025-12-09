@@ -1,11 +1,29 @@
 #!/bin/bash
 
+# Default log_print (works even if MODE is missing)
+log_print() {
+    printf "%s\n" "$1"
+}
+
+MODE="normal"  # or quiet
 
 
+########################################################################
+# QUIET MODE — hides everything except log_print output
+########################################################################
+if [[ "$MODE" == "quiet" ]]; then
+    exec >/dev/null 2>&1
+    log_print() {
+        printf "%s %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$1"
+    }
+fi
 
+
+########################################################################
+# NORMAL MODE — timestamps everything printed (stdout + stderr)
+########################################################################
 if [[ "$MODE" == "normal" ]]; then
     exec > >(awk '
-        # Drop noisy content entirely
         /Retrieving API key token/ { next }
         /IAM access token/ { next }
         /Resource group:/ { next }
@@ -15,31 +33,23 @@ if [[ "$MODE" == "normal" ]]; then
         /Variables loaded successfully/ { next }
         /crn:v1:/ { next }
 
-        # If the line is JUST a timestamp block (possibly repeated), skip it
         /^\[[0-9-]{10} [0-9:]{8}\]$/ { next }
 
-        # For lines containing multiple timestamps — print ONCE
         {
-            # remove duplicates like [timestamp] [timestamp] [timestamp]
             line=$0
             gsub(/\[[0-9-]{10} [0-9:]{8}\][ ]*/, "", line)
-
-            # If stripped line is now empty, skip
             if (length(line) < 2) next
 
             printf "[%s] %s\n", strftime("%Y-%m-%d %H:%M:%S"), line
         }
     ' | tee /proc/1/fd/1) \
-    2> >(awk '
-        {
-            printf "[%s] %s\n", strftime("%Y-%m-%d %H:%M:%S"), $0
-        }
-    ' | tee /proc/1/fd/2)
+    2> >(awk '{ printf "[%s] %s\n", strftime("%Y-%m-%d %H:%M:%S"), $0 }' | tee /proc/1/fd/2)
 
     log_print() {
         printf "[%s] %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$1"
     }
 fi
+
 
 
 
