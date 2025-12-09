@@ -1,27 +1,14 @@
 #!/bin/bash
 
-# Default log_print (works even if MODE is missing)
-log_print() {
-    printf "%s\n" "$1"
-}
-
-MODE="normal"  # or quiet
+############################################################
+# Define mode first
+############################################################
+MODE="normal"    # or quiet
 
 
-########################################################################
-# QUIET MODE — hides everything except log_print output
-########################################################################
-if [[ "$MODE" == "quiet" ]]; then
-    exec >/dev/null 2>&1
-    log_print() {
-        printf "%s %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$1"
-    }
-fi
-
-
-########################################################################
-# NORMAL MODE — timestamps everything printed (stdout + stderr)
-########################################################################
+############################################################
+# NORMAL MODE — filter noisy logs & timestamp output
+############################################################
 if [[ "$MODE" == "normal" ]]; then
     exec > >(awk '
         /Retrieving API key token/ { next }
@@ -39,16 +26,29 @@ if [[ "$MODE" == "normal" ]]; then
             line=$0
             gsub(/\[[0-9-]{10} [0-9:]{8}\][ ]*/, "", line)
             if (length(line) < 2) next
-
             printf "[%s] %s\n", strftime("%Y-%m-%d %H:%M:%S"), line
         }
     ' | tee /proc/1/fd/1) \
-    2> >(awk '{ printf "[%s] %s\n", strftime("%Y-%m-%d %H:%M:%S"), $0 }' | tee /proc/1/fd/2)
+    2> >(awk '
+        { printf "[%s] %s\n", strftime("%Y-%m-%d %H:%M:%S"), $0 }
+    ' | tee /proc/1/fd/2)
 
     log_print() {
         printf "[%s] %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$1"
     }
 fi
+
+
+############################################################
+# QUIET MODE — only log_print is visible
+############################################################
+if [[ "$MODE" == "quiet" ]]; then
+    exec >/dev/null 2>&1
+    log_print() {
+        printf "[%s] %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$1"
+    }
+fi
+
 
 
 
