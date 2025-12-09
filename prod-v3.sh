@@ -4,41 +4,67 @@
 # SELECT MODE — only ONE of these should be uncommented
 ########################################################################
 
-MODE="normal"    # Shows everything (recommended for CE runs)
-#MODE="quiet"     # Only log_print messages show
-
+MODE="normal"    # full output but with filtering
+#MODE="quiet"     # only log_print lines appear
 
 ########################################################################
-# QUIET MODE — hides everything except log_print output
+# COMMON TIMESTAMP FUNCTION — used everywhere
+########################################################################
+timestamp() {
+    date +"%Y-%m-%d %H:%M:%S"
+}
+
+########################################################################
+# QUIET MODE — only log_print creates visible output
 ########################################################################
 if [[ "$MODE" == "quiet" ]]; then
-    exec >/dev/null 2>&1
+    QUIET_OUTPUT=$(mktemp)
+    exec >"$QUIET_OUTPUT" 2>&1
+
     log_print() {
-        printf "%s %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$1"
+        printf "[%s] %s\n" "$(timestamp)" "$1"
     }
 fi
 
 
 ########################################################################
-# NORMAL MODE — timestamps everything printed (stdout + stderr)
+# NORMAL MODE — timestamp everything EXCEPT sensitive/noisy lines
 ########################################################################
 if [[ "$MODE" == "normal" ]]; then
-    exec > >(tee /proc/1/fd/1 | awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0 }') \
-         2> >(tee /proc/1/fd/2 | awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0 }')
+    exec > >(awk '
+        # DROP noisy environment blocks
+        /Retrieving API key token/ { next }
+        /IAM access token/         { next }
+        /API endpoint:/            { next }
+        /User:/                    { next }
+        /Region:/                  { next }
+        /Resource group:/          { next }
+        /Account:/                 { next }
+        /Variables loaded successfully/ { next }
+
+        # DROP repeating workspace crn targeting
+        /crn:v1:bluemix:public:power-iaas/ { next }
+
+        # DROP empty separators that repeat many times
+        /^\s*$/ { next }
+
+        # OTHERWISE PRINT WITH TIMESTAMP
+        { print "[" strftime("%Y-%m-%d %H:%M:%S") "]", $0 }
+
+    ' | tee /proc/1/fd/1) \
+    2> >(awk '{ print "[" strftime("%Y-%m-%d %H:%M:%S") "]", $0 }' | tee /proc/1/fd/2)
 
     log_print() {
-        printf "%s\n" "$1"
+        printf "[%s] %s\n" "$(timestamp)" "$1"
     }
 fi
 
-echo "[EMPTY-DEPLOY] ==============================="
-echo "[EMPTY-DEPLOY] Job Stage Started"
-echo "[EMPTY-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-echo "[EMPTY-DEPLOY] ==============================="
 
-echo "====================================================================="
-echo "Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
-echo "====================================================================="
+
+echo "============================================================================"
+echo "Job 1: Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
+echo "============================================================================"
+echo ""
 
 set -eu
 
@@ -92,46 +118,23 @@ STATUS_POLL_LIMIT=20
 
 echo "Variables loaded successfully."
 
-#--------------------------------------------------------------
-echo "Step 1 of 3:  IBM Cloud Authentication"
-#--------------------------------------------------------------
+log_print "========================================================================="
+log_print "Stage 1 of 2: IBM Cloud Authentication and Targeting PowerVS Workspace"
+log_print "========================================================================="
+log_print ""
 
-CURRENT_STEP="AUTH_TOKEN_RETRIEVAL"
-echo "STEP: Retrieving IAM access token..."
-IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=urn:ibm:params:oauth:grant-type:apikey" \
-  -d "apikey=${API_KEY}")
+ibmcloud login --apikey "$API_KEY" -r "$REGION" || { echo "ERROR: IBM Cloud login failed."; exit 1; }
+ibmcloud target -g "$RESOURCE_GROP_NAME"      || { echo "ERROR: Failed to target resource group."; exit 1; }
+ibmcloud pi ws target "$PVS_CRN"              || { echo "ERROR: Failed to target PowerVS workspace $PVS_CRN."; exit 1; }
 
-IAM_TOKEN=$(echo "$IAM_RESPONSE" | jq -r '.access_token')
-
-if [[ -z "$IAM_TOKEN" || "$IAM_TOKEN" == "null" ]]; then
-    echo "FAILURE: Could not retrieve IAM token."
-    exit 1
-fi
-
-echo "Step 1 of 3 Complete, Successfully authenticated into IBM Cloud"
-
-#-----------------------------------------------------------------
-#IBM Cloud Login
-# ----------------------------------------------------------------
-CURRENT_STEP="IBM_CLOUD_LOGIN"
-echo "STEP: Logging into IBM Cloud..."
-ibmcloud login --apikey "${API_KEY}" -r "${REGION}" -g "${RESOURCE_GROUP}" --quiet
-echo "SUCCESS: IBM Cloud login completed."
-
-# ----------------------------------------------------------------
-echo "Stage 2 of 3: Target PowerVS Workspace"
-# ----------------------------------------------------------------
-CURRENT_STEP="TARGET_PVS_WORKSPACE"
-echo "STEP: Targeting Power Virtual Server workspace..."
-ibmcloud pi ws target "${PVS_CRN}"
-echo "Stage 2 of 3 Complete, PowerVS Workspace targeted for deployment"
+log_print "Stage 1 of 7 Complete: Successfully authenticated into IBM Cloud"
+log_print ""
 
 
-# ----------------------------------------------------------------
-echo "Stage 3 of 3: Create Empty IBMi LPAR in defined Subnet w/PrivateIP"
-# ----------------------------------------------------------------
+log_print "========================================================================="
+log_print "Stage 2 of 2: Create/Deploy PVS LPAR with defined Private IP in Subnet"
+log_print "========================================================================="
+log_print ""
 
 CURRENT_STEP="CREATE_LPAR"
 echo "STEP: Submitting LPAR create request..."
