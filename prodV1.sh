@@ -208,37 +208,59 @@ trap - ERR
 # ---------------------------------------------------------
 # Trigger Next Job
 # ---------------------------------------------------------
-
 CURRENT_STEP="SUBMIT_NEXT_JOB"
 echo "STEP: Evaluate triggering next Code Engine job..."
 
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     echo "Next job execution requested — attempting launch..."
 
+    # We don't want any failure here to fail Job 1
     set +e
+
+    echo "Targeting Code Engine project: IBMi"
+    if ! ibmcloud code-engine project target --name IBMi > /dev/null 2>&1; then
+        echo "[WARNING] Could not target Code Engine project 'IBMi'."
+        echo "[WARNING] Skipping downstream job trigger."
+        echo "[INFO] Treating Job 1 as SUCCESS and exiting."
+        exit 0
+    fi
+
+    # Submit downstream jobrun for prod-snap
     NEXT_RUN=$(ibmcloud ce jobrun submit \
-        --job snap-attach \
+        --job prod-snap \
         --output json 2>/dev/null | jq -r '.name')
 
     SUBMIT_CODE=$?
     sleep 2
 
-    LATEST_RUN=$(ibmcloud ce jobrun list --job snap-attach --output json \
-        2>/dev/null | jq -r '.[0].name')
-
-    set -e
+    # Try to confirm via jobrun list (best-effort)
+    LATEST_RUN=$(ibmcloud ce jobrun list \
+        --job prod-snap \
+        --output json 2>/dev/null | jq -r '.[0].name')
 
     echo ""
     echo "--- Verification of next job submission ---"
 
-    if [[ "$LATEST_RUN" != "null" && -n "$LATEST_RUN" ]]; then
+    if [[ "$SUBMIT_CODE" -ne 0 || -z "$NEXT_RUN" || "$NEXT_RUN" == "null" ]]; then
+        echo "[WARNING] Jobrun submit for 'prod-snap' returned non-zero or no run name."
+        echo "[WARNING] Manual review of Code Engine may be required."
+        echo "[INFO] Treating Job 1 as SUCCESS and exiting."
+        exit 0
+    fi
+
+    if [[ -n "$LATEST_RUN" && "$LATEST_RUN" != "null" ]]; then
         echo "SUCCESS: Verified downstream CE job started:"
-        echo " → Job Name: snap-attach"
+        echo " → Job Name: prod-snap"
         echo " → Run ID   : $LATEST_RUN"
     else
-        echo "[WARNING] Could not confirm downstream job start"
+        echo "[WARNING] Could not confirm downstream job start via jobrun list."
         echo "[WARNING] Manual review recommended."
+        echo "[INFO] Treating Job 1 as SUCCESS and exiting."
+        exit 0
     fi
+
+    # If we get here, everything worked, and Job 1 can just continue or end naturally
+    set -e
 
 else
     echo "RUN_ATTACH_JOB=No — downstream job trigger skipped."
