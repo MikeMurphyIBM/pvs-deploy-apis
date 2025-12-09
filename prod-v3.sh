@@ -1,54 +1,5 @@
 #!/bin/bash
 
-############################################################
-# Define mode first
-############################################################
-MODE="normal"    # or quiet
-
-
-############################################################
-# NORMAL MODE — filter noisy logs & timestamp output
-############################################################
-if [[ "$MODE" == "normal" ]]; then
-    exec > >(awk '
-        /Retrieving API key token/ { next }
-        /IAM access token/ { next }
-        /Resource group:/ { next }
-        /Account:/ { next }
-        /User:/ { next }
-        /Region:/ { next }
-        /Variables loaded successfully/ { next }
-        /crn:v1:/ { next }
-
-        /^\[[0-9-]{10} [0-9:]{8}\]$/ { next }
-
-        {
-            line=$0
-            gsub(/\[[0-9-]{10} [0-9:]{8}\][ ]*/, "", line)
-            if (length(line) < 2) next
-            printf "[%s] %s\n", strftime("%Y-%m-%d %H:%M:%S"), line
-        }
-    ' | tee /proc/1/fd/1) \
-    2> >(awk '
-        { printf "[%s] %s\n", strftime("%Y-%m-%d %H:%M:%S"), $0 }
-    ' | tee /proc/1/fd/2)
-
-    log_print() {
-        printf "[%s] %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$1"
-    }
-fi
-
-
-############################################################
-# QUIET MODE — only log_print is visible
-############################################################
-if [[ "$MODE" == "quiet" ]]; then
-    exec >/dev/null 2>&1
-    log_print() {
-        printf "[%s] %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$1"
-    }
-fi
-
 
 
 
@@ -111,23 +62,23 @@ STATUS_POLL_LIMIT=20
 
 echo "Variables loaded successfully."
 
-log_print "========================================================================="
-log_print "Stage 1 of 2: IBM Cloud Authentication and Targeting PowerVS Workspace"
-log_print "========================================================================="
-log_print ""
+echo "========================================================================="
+echo "Stage 1 of 2: IBM Cloud Authentication and Targeting PowerVS Workspace"
+echo "========================================================================="
+echo ""
 
 ibmcloud login --apikey "$API_KEY" -r "$REGION" || { echo "ERROR: IBM Cloud login failed."; exit 1; }
 ibmcloud target -g "$RESOURCE_GROP_NAME"      || { echo "ERROR: Failed to target resource group."; exit 1; }
 ibmcloud pi ws target "$PVS_CRN"              || { echo "ERROR: Failed to target PowerVS workspace $PVS_CRN."; exit 1; }
 
-log_print "Stage 1 of 7 Complete: Successfully authenticated into IBM Cloud"
-log_print ""
+echo "Stage 1 of 7 Complete: Successfully authenticated into IBM Cloud"
+echo ""
 
 
-log_print "========================================================================="
-log_print "Stage 2 of 2: Create/Deploy PVS LPAR with defined Private IP in Subnet"
-log_print "========================================================================="
-log_print ""
+echo "========================================================================="
+echo "Stage 2 of 2: Create/Deploy PVS LPAR with defined Private IP in Subnet"
+echo "========================================================================="
+echo ""
 
 CURRENT_STEP="CREATE_LPAR"
 echo "STEP: Submitting LPAR create request..."
@@ -253,8 +204,8 @@ echo "Next Job Enabled  : ${RUN_ATTACH_JOB:-No}"
 echo "==========================="
 echo ""
 
-echo "[EMPTY-DEPLOY] Job Completed Successfully"
-echo "[EMPTY-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "Job Completed Successfully"
+echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 
 # ---------------------------------------------------------
