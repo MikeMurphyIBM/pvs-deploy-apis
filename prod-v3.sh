@@ -73,7 +73,7 @@ echo "========================================================================="
 echo ""
 
 ibmcloud login --apikey "$API_KEY" -r "$REGION" || { echo "ERROR: IBM Cloud login failed."; exit 1; }
-ibmcloud target -g "$RESOURCE_GROP_NAME"      || { echo "ERROR: Failed to target resource group."; exit 1; }
+ibmcloud target -g "$RESOURCE_GROUP"      || { echo "ERROR: Failed to target resource group."; exit 1; }
 ibmcloud pi ws target "$PVS_CRN"              || { echo "ERROR: Failed to target PowerVS workspace $PVS_CRN."; exit 1; }
 
 echo "Stage 1 of 7 Complete: Successfully authenticated into IBM Cloud"
