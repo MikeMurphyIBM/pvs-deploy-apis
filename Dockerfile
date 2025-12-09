@@ -27,8 +27,8 @@ RUN ibmcloud plugin install code-engine -f
 # -----------------------------------------------------------
 # Copy and prepare job script
 # -----------------------------------------------------------
-COPY prod-V3.sh /prod-V3.sh
+COPY prod-v3.sh /prod-v3.sh
 
-RUN sed -i 's/\r$//' /prod-V3.sh && chmod +x /prod-V3.sh
+RUN sed -i 's/\r$//' /prod-v3.sh && chmod +x /prod-v3.sh
 
-CMD ["/prod-V3.sh"]
+CMD ["/prod-v3.sh"]
