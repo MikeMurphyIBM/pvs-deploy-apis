@@ -1,5 +1,36 @@
 #!/bin/bash
 
+########################################################################
+# SELECT MODE — only ONE of these should be uncommented
+########################################################################
+
+MODE="normal"    # Shows everything (recommended for CE runs)
+#MODE="quiet"     # Only log_print messages show
+
+
+########################################################################
+# QUIET MODE — hides everything except log_print output
+########################################################################
+if [[ "$MODE" == "quiet" ]]; then
+    exec >/dev/null 2>&1
+    log_print() {
+        printf "%s %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$1"
+    }
+fi
+
+
+########################################################################
+# NORMAL MODE — timestamps everything printed (stdout + stderr)
+########################################################################
+if [[ "$MODE" == "normal" ]]; then
+    exec > >(tee /proc/1/fd/1 | awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0 }') \
+         2> >(tee /proc/1/fd/2 | awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0 }')
+
+    log_print() {
+        printf "%s\n" "$1"
+    }
+fi
+
 echo "[EMPTY-DEPLOY] ==============================="
 echo "[EMPTY-DEPLOY] Job Stage Started"
 echo "[EMPTY-DEPLOY] Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
