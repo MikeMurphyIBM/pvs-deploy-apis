@@ -1,63 +1,46 @@
 #!/bin/bash
 
-########################################################################
-# SELECT MODE — only ONE of these should be uncommented
-########################################################################
-
-MODE="normal"    # full output but with filtering
-#MODE="quiet"     # only log_print lines appear
-
-########################################################################
-# COMMON TIMESTAMP FUNCTION — used everywhere
-########################################################################
-timestamp() {
-    date +"%Y-%m-%d %H:%M:%S"
-}
-
-########################################################################
-# QUIET MODE — only log_print creates visible output
-########################################################################
-if [[ "$MODE" == "quiet" ]]; then
-    QUIET_OUTPUT=$(mktemp)
-    exec >"$QUIET_OUTPUT" 2>&1
-
-    log_print() {
-        printf "[%s] %s\n" "$(timestamp)" "$1"
-    }
-fi
 
 
-########################################################################
-# NORMAL MODE — timestamp everything EXCEPT sensitive/noisy lines
-########################################################################
+
 if [[ "$MODE" == "normal" ]]; then
     exec > >(awk '
-        # DROP noisy environment blocks
+        # Drop noisy content entirely
         /Retrieving API key token/ { next }
-        /IAM access token/         { next }
-        /API endpoint:/            { next }
-        /User:/                    { next }
-        /Region:/                  { next }
-        /Resource group:/          { next }
-        /Account:/                 { next }
+        /IAM access token/ { next }
+        /Resource group:/ { next }
+        /Account:/ { next }
+        /User:/ { next }
+        /Region:/ { next }
         /Variables loaded successfully/ { next }
+        /crn:v1:/ { next }
 
-        # DROP repeating workspace crn targeting
-        /crn:v1:bluemix:public:power-iaas/ { next }
+        # If the line is JUST a timestamp block (possibly repeated), skip it
+        /^\[[0-9-]{10} [0-9:]{8}\]$/ { next }
 
-        # DROP empty separators that repeat many times
-        /^\s*$/ { next }
+        # For lines containing multiple timestamps — print ONCE
+        {
+            # remove duplicates like [timestamp] [timestamp] [timestamp]
+            line=$0
+            gsub(/\[[0-9-]{10} [0-9:]{8}\][ ]*/, "", line)
 
-        # OTHERWISE PRINT WITH TIMESTAMP
-        { print "[" strftime("%Y-%m-%d %H:%M:%S") "]", $0 }
+            # If stripped line is now empty, skip
+            if (length(line) < 2) next
 
+            printf "[%s] %s\n", strftime("%Y-%m-%d %H:%M:%S"), line
+        }
     ' | tee /proc/1/fd/1) \
-    2> >(awk '{ print "[" strftime("%Y-%m-%d %H:%M:%S") "]", $0 }' | tee /proc/1/fd/2)
+    2> >(awk '
+        {
+            printf "[%s] %s\n", strftime("%Y-%m-%d %H:%M:%S"), $0
+        }
+    ' | tee /proc/1/fd/2)
 
     log_print() {
-        printf "[%s] %s\n" "$(timestamp)" "$1"
+        printf "[%s] %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$1"
     }
 fi
+
 
 
 
