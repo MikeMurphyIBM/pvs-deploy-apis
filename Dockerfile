@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     ca-certificates \
     coreutils \
+    moreutils \
     gnupg \
     unzip \
  && rm -rf /var/lib/apt/lists/*
