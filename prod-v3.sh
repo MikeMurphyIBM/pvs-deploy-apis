@@ -299,9 +299,6 @@ trap - ERR   # disable rollback
 # Optional Stage Execution
 # ----------------------------------------------------------------
 
-echo "========================================================================="
-echo "Optional Stage: Execute Snapshot/Attach Process on Primary LPAR"
-echo "========================================================================="
 
 
 # first attempt but didnt target CE job
@@ -315,7 +312,7 @@ echo "========================================================================="
 #        --output json | jq -r '.name'
 #    set -e
 
-#    echo "Optional Stage execution requested and submitted successfully."
+
 
 # else
 #    echo "Optional Stage NOT executed — '${LPAR_NAME}' will remain in SHUTOFF state ready for Boot & Data Volume attachment and subsequent OS Startup."
