@@ -271,15 +271,13 @@ echo ""
 # ----------------------------------------------------------------------
 # COMPLETION SUMMARY
 # ----------------------------------------------------------------------
-# ----------------------------------------------------------------
-# Completion Summary
-# ----------------------------------------------------------------
+
 
 OPTIONAL_STAGE_EXECUTED="No"
 
 echo ""
 echo "==========================="
-echo " JOB COMPLETED SUCCESSFULLY"
+echo " JOB 1 COMPLETED SUCCESSFULLY"
 echo "==========================="
 echo "LPAR Name        : ${LPAR_NAME}"
 echo "Instance ID      : ${INSTANCE_ID}"
@@ -313,10 +311,7 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     echo "Optional Stage execution requested and submitted successfully."
 
 else
-    echo "Optional Stage not executed — '${LPAR_NAME}' will remain in SHUTOFF state"
-    echo "ready for Boot, Data Volume attachment, and Startup."
+    echo "Optional Stage NOT executed — '${LPAR_NAME}' will remain in SHUTOFF state ready for Boot & Data Volume attachment and subsequent OS Startup."
 fi
 
-echo ""
-echo "Optional Stage Executed: ${OPTIONAL_STAGE_EXECUTED}"
-echo ""
+
