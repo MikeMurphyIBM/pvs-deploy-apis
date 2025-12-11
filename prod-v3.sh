@@ -1,16 +1,8 @@
 #!/usr/bin/env bash
 
-# ----------------------------------------------------------------
-# Timestamp all STDOUT and STDERR — CE safe
-# ----------------------------------------------------------------
-#timestamp() {
- # while IFS= read -r line; do
- #   printf "[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$line"
- # done
-#}
-
-# Send stdout+stderr through timestamp without causing pipefail issues
-#exec > >(timestamp) 2>&1
+# ======================================================================
+# JOB 1 — EMPTY IBM i LPAR PROVISIONING (CE-SAFE, RESILIENT VERSION)
+# ======================================================================
 
 echo "============================================================================"
 echo "Job 1: Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
@@ -19,10 +11,11 @@ echo ""
 
 set -euo pipefail
 
-# ----------------------------------------------------------------
-# Rollback Function
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------------
+# ROLLBACK — used when any unhandled error occurs
+# ----------------------------------------------------------------------
 rollback() {
+    echo ""
     echo "===================================================="
     echo "ROLLBACK EVENT INITIATED"
     echo "An error occurred in step: ${CURRENT_STEP:-UNKNOWN}"
@@ -40,9 +33,9 @@ rollback() {
 
 trap rollback ERR
 
-# ----------------------------------------------------------------
-# Variables
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------------
+# VARIABLES
+# ----------------------------------------------------------------------
 CURRENT_STEP="VARIABLE_SETUP"
 
 API_KEY="${IBMCLOUD_API_KEY}"
@@ -65,20 +58,19 @@ API_VERSION="2024-02-28"
 
 POLL_INTERVAL=45
 STATUS_POLL_LIMIT=20
-
 INSTANCE_ID=""
 
 echo "Variables loaded successfully."
+echo ""
 
-# ----------------------------------------------------------------
-# Stage 1 — IBM Cloud Authentication
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------------
+# IBM CLOUD LOGIN + TARGETING
+# ----------------------------------------------------------------------
 CURRENT_STEP="IBM_CLOUD_LOGIN"
 
 echo "========================================================================="
-echo "Stage 1 of 2: IBM Cloud Authentication and Targeting PowerVS Workspace"
+echo "Stage 1 of 2: IBM Cloud Authentication & Targeting PowerVS Workspace"
 echo "========================================================================="
-echo ""
 
 ibmcloud login --apikey "$API_KEY" -r "$REGION" || {
     echo "ERROR: IBM Cloud login failed."
@@ -98,10 +90,11 @@ ibmcloud pi workspace target "$PVS_CRN" || {
 echo "IBM Cloud authentication complete."
 echo ""
 
-# ----------------------------------------------------------------
-# IAM Token Retrieval
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------------
+# RETRIEVE IAM TOKEN — SAFE VERSION (matches working Script B)
+# ----------------------------------------------------------------------
 CURRENT_STEP="IAM_TOKEN_RETRIEVAL"
+
 echo "Fetching IAM access token..."
 
 IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
@@ -114,21 +107,20 @@ IAM_TOKEN=$(echo "$IAM_RESPONSE" | jq -r '.access_token')
 
 if [[ -z "$IAM_TOKEN" || "$IAM_TOKEN" == "null" ]]; then
     echo "ERROR: IAM token retrieval failed"
+    echo "IAM response: $IAM_RESPONSE"
     exit 1
 fi
-
 
 export IAM_TOKEN
 echo "IAM token retrieved successfully."
 echo ""
 
-# ----------------------------------------------------------------
-# Stage 2 — Create LPAR (Resilient CE-safe curl)
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------------
+# STAGE 2 — CREATE LPAR (CE-SAFE, RESILIENT)
+# ----------------------------------------------------------------------
 echo "========================================================================="
 echo "Stage 2 of 2: Create/Deploy PVS LPAR"
 echo "========================================================================="
-echo ""
 
 CURRENT_STEP="CREATE_LPAR"
 echo "Submitting LPAR creation request..."
@@ -159,44 +151,45 @@ API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${
 ATTEMPTS=0
 MAX_ATTEMPTS=3
 
+# ----------------------------------------------------------------------
+# LOOP UNTIL INSTANCE_ID IS FOUND (SAFE AGAINST jq FAILURES)
+# ----------------------------------------------------------------------
 while [[ $ATTEMPTS -lt $MAX_ATTEMPTS && -z "$INSTANCE_ID" ]]; do
     ATTEMPTS=$((ATTEMPTS + 1))
     echo "API attempt ${ATTEMPTS}/${MAX_ATTEMPTS}..."
 
-    # --- CE-SAFE CURL BLOCK ---
     set +e
-    RESPONSE=$(
-      curl -s -X POST "${API_URL}" \
+    RESPONSE=$(curl -s -X POST "${API_URL}" \
         -H "Authorization: Bearer ${IAM_TOKEN}" \
         -H "CRN: ${PVS_CRN}" \
         -H "Content-Type: application/json" \
-        -d "${PAYLOAD}" 2>&1
-    )
+        -d "${PAYLOAD}" 2>&1)
     CURL_CODE=$?
     set -e
 
     if [[ $CURL_CODE -ne 0 ]]; then
-        echo "WARNING: curl failed with exit code $CURL_CODE — retrying..."
+        echo "WARNING: curl exit code $CURL_CODE — retrying..."
         sleep 5
         continue
     fi
 
+    # SAFE JQ PARSER — never terminates script on errors
     INSTANCE_ID=$(echo "$RESPONSE" | jq -r '
-        .pvmInstanceID //
-        .[0].pvmInstanceID //
-        .pvmInstance.pvmInstanceID //
+        .pvmInstanceID? //
+        (.[0].pvmInstanceID? // empty) //
+        .pvmInstance.pvmInstanceID? //
         empty
-    ')
+    ' 2>/dev/null || true)
 
     if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
-        echo "WARNING: No instance ID returned — retrying..."
+        echo "WARNING: Could not extract INSTANCE_ID — retrying..."
         sleep 5
     fi
 done
 
-# If exhausted
+# FAIL AFTER MAX ATTEMPTS
 if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
-    echo "FAILURE: Unable to retrieve INSTANCE_ID after ${MAX_ATTEMPTS} attempts."
+    echo "FAILURE: Could not retrieve INSTANCE_ID after ${MAX_ATTEMPTS} attempts."
     echo "API Response:"
     echo "$RESPONSE"
     exit 1
@@ -207,23 +200,22 @@ echo "Instance ID: $INSTANCE_ID"
 echo "Private IP:  $Private_IP"
 echo ""
 
-# ----------------------------------------------------------------
-# Wait for backend provisioning stabilization
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------------
+# WAIT 6 MIN FOR POWER VS INTERNAL PROVISIONING
+# ----------------------------------------------------------------------
 echo "Waiting 6 minutes for PowerVS provisioning window..."
-
 sleep 360
-
-echo "Starting status polling..."
 echo ""
 
-# ----------------------------------------------------------------
-# Poll for final state
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------------
+# POLL INSTANCE STATUS
+# ----------------------------------------------------------------------
 CURRENT_STEP="STATUS_POLLING"
 
 STATUS=""
 ATTEMPT=1
+
+echo "Starting status polling..."
 
 while true; do
     set +e
@@ -237,7 +229,7 @@ while true; do
         continue
     fi
 
-    STATUS=$(echo "$STATUS_JSON" | jq -r '.status // empty')
+    STATUS=$(echo "$STATUS_JSON" | jq -r '.status? // empty')
     echo "STATUS CHECK ($ATTEMPT/${STATUS_POLL_LIMIT}) → $STATUS"
 
     if [[ "$STATUS" == "SHUTOFF" || "$STATUS" == "STOPPED" ]]; then
@@ -253,13 +245,12 @@ while true; do
     sleep "$POLL_INTERVAL"
 done
 
-echo ""
 echo "LPAR reached final state: $STATUS"
 echo ""
 
-# ----------------------------------------------------------------
-# Completion Summary
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------------
+# COMPLETION SUMMARY
+# ----------------------------------------------------------------------
 echo "==========================="
 echo " JOB COMPLETED SUCCESSFULLY"
 echo "==========================="
@@ -273,12 +264,11 @@ echo ""
 
 trap - ERR
 
-# ----------------------------------------------------------------
-# Optional downstream job trigger
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------------
+# OPTIONAL DOWNSTREAM JOB TRIGGER
+# ----------------------------------------------------------------------
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     echo "Launching downstream job 'snap-attach'..."
-
     set +e
     ibmcloud ce jobrun submit \
         --job snap-attach \
@@ -287,5 +277,3 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
 else
     echo "RUN_ATTACH_JOB=No — downstream job skipped."
 fi
-
-
