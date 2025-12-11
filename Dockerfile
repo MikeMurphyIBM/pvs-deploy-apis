@@ -24,19 +24,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL https://clis.cloud.ibm.com/install/linux | bash
 
 # Ensure ibmcloud command is on PATH
-ENV PATH="/root/.bluemix:$PATH"
+ENV PATH="/usr/local/ibmcloud/bin:/root/.bluemix:$PATH"
 
 # -----------------------------------------------------------
 # Install IBM Cloud plugins
 # -----------------------------------------------------------
 
-# 1. Initialize plugin repository list
+# Disable version check to prevent stopping the build
+RUN ibmcloud config --check-version=false
+
+# Initialize plugin repository list
 RUN ibmcloud plugin repo-plugins
 
-# 2. Install the Power Virtual Server plugin
+# Install PowerVS plugin
 RUN ibmcloud plugin install power-iaas -f
 
-# 3. Install the Code Engine plugin
+# Install Code Engine plugin
 RUN ibmcloud plugin install code-engine -f
 
 # -----------------------------------------------------------
@@ -51,3 +54,4 @@ RUN sed -i 's/\r$//' /prod-v3.sh && chmod +x /prod-v3.sh
 # Run the job script
 # -----------------------------------------------------------
 CMD ["/prod-v3.sh"]
+
