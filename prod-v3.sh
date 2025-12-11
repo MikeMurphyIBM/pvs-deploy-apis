@@ -223,15 +223,6 @@ echo ""
 # ----------------------------------------------------------------------
 # POLL INSTANCE STATUS
 # ----------------------------------------------------------------------
-# ----------------------------------------------------------------
-# Initial short wait before polling
-# ----------------------------------------------------------------
-echo "Initial provisioning window: waiting 90 seconds..."
-sleep 90
-
-echo ""
-echo "Starting status polling (every 30 seconds)..."
-echo ""
 
 POLL_INTERVAL=30
 STATUS_POLL_LIMIT=30
