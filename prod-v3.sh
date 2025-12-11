@@ -303,19 +303,55 @@ echo "========================================================================="
 echo "Optional Stage: Execute Snapshot/Attach Process on Primary LPAR"
 echo "========================================================================="
 
+
+# first attempt but didnt target CE job
+# if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
+#    OPTIONAL_STAGE_EXECUTED="Yes"
+#    echo "Launching downstream job 'snap-attach'..."
+
+#    set +e
+#    ibmcloud ce jobrun submit \
+#        --job prod-snap \
+#        --output json | jq -r '.name'
+#    set -e
+
+#    echo "Optional Stage execution requested and submitted successfully."
+
+# else
+#    echo "Optional Stage NOT executed — '${LPAR_NAME}' will remain in SHUTOFF state ready for Boot & Data Volume attachment and subsequent OS Startup."
+# fi
+
+echo "========================================================================="
+echo "Optional Stage: Execute Snapshot/Attach Process on Primary LPAR"
+echo "========================================================================="
+
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     OPTIONAL_STAGE_EXECUTED="Yes"
-    echo "Launching downstream job 'snap-attach'..."
+    echo "Switching Code Engine context to IBMi project..."
 
-    set +e
-    ibmcloud ce jobrun submit \
+    # Target the CE project
+    ibmcloud ce project target --name IBMi > /dev/null 2>&1 || {
+        echo "ERROR: Unable to select project IBMi for optional attach stage."
+        exit 1
+    }
+
+    echo "Submitting Code Engine jobrun: prod-snap"
+
+    # Submit attach job and capture the jobrun name
+    NEXT_RUN=$(ibmcloud ce jobrun submit \
         --job prod-snap \
-        --output json | jq -r '.name'
-    set -e
+        --output json | jq -r '.name')
 
-    echo "Optional Stage execution requested and submitted successfully."
+    if [[ -z "$NEXT_RUN" || "$NEXT_RUN" == "null" ]]; then
+        echo "ERROR: Job submission failed — no jobrun name returned."
+        exit 1
+    fi
+
+    echo "Triggered attach instance: $NEXT_RUN"
+    echo "Optional Stage execution submitted successfully."
 
 else
+    OPTIONAL_STAGE_EXECUTED="No"
     echo "Optional Stage NOT executed — '${LPAR_NAME}' will remain in SHUTOFF state ready for Boot & Data Volume attachment and subsequent OS Startup."
 fi
 
