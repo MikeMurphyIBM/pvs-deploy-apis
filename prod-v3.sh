@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 
-# ======================================================================
-# JOB 1 — EMPTY IBM i LPAR PROVISIONING (CE-SAFE, RESILIENT VERSION)
-# ======================================================================
+
+timestamp() {
+  while IFS= read -r line; do
+    printf "[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$line"
+  done
+}
+exec > >(timestamp) 2>&1
+
 
 echo "============================================================================"
 echo "Job 1: Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
@@ -304,7 +309,7 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
 
     set +e
     ibmcloud ce jobrun submit \
-        --job snap-attach \
+        --job prod-snap \
         --output json | jq -r '.name'
     set -e
 
