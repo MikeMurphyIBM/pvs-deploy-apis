@@ -3,10 +3,14 @@
 # ----------------------------------------------------------------
 # Timestamp all STDOUT and STDERR
 # ----------------------------------------------------------------
-#exec > >(awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush() }') \
-#     2> >(awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush() }')
+timestamp() {
+  while IFS= read -r line; do
+    printf "[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$line"
+  done
+}
 
-echo "script started"
+exec > >(timestamp) 2>&1
+
 
 echo "============================================================================"
 echo "Job 1: Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
