@@ -325,19 +325,21 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
 
     echo "Submitting Code Engine jobrun: prod-snap"
 
+    # Capture ALL output (stdout + stderr)
     RAW_SUBMISSION=$(ibmcloud ce jobrun submit --job prod-snap --output json 2>&1)
+
     echo "Jobrun submission response:"
     echo "$RAW_SUBMISSION"
 
+    # Extract name safely
     NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.name // empty')
 
     if [[ -z "$NEXT_RUN" ]]; then
-    echo "ERROR: Job submission returned no jobrun name."
-    exit 1
+        echo "ERROR: Job submission returned no jobrun name."
+        exit 1
     fi
 
-echo "Triggered attach instance: $NEXT_RUN"
-
+    echo "Triggered attach instance: $NEXT_RUN"
     echo "Optional Stage execution submitted successfully."
 
 else
