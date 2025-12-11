@@ -196,26 +196,44 @@ if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
 fi
 
 echo "SUCCESS: LPAR creation submitted."
+echo "LPAR NAMR:  $LPAR_NAME"
 echo "Instance ID: $INSTANCE_ID"
 echo "Private IP:  $Private_IP"
+echo "Subnet ID: $SUBNET_ID"
+echo "LPAR Cores: $PROCESSORS"
+echo "LPAR Memory: $MEMORY_GB"
 echo ""
 
 # ----------------------------------------------------------------------
-# WAIT 6 MIN FOR POWER VS INTERNAL PROVISIONING
+# WAIT 90 SEC FOR POWER VS INTERNAL PROVISIONING
 # ----------------------------------------------------------------------
-echo "Waiting 6 minutes for PowerVS provisioning window..."
-sleep 360
+echo "Initial provisioning window: waiting 90 seconds before first status check..."
+sleep 90
+
 echo ""
+echo "Beginning status polling (every 30 seconds)..."
+echo ""
+
 
 # ----------------------------------------------------------------------
 # POLL INSTANCE STATUS
 # ----------------------------------------------------------------------
-CURRENT_STEP="STATUS_POLLING"
+# ----------------------------------------------------------------
+# Initial short wait before polling
+# ----------------------------------------------------------------
+echo "Initial provisioning window: waiting 90 seconds..."
+sleep 90
 
+echo ""
+echo "Starting status polling (every 30 seconds)..."
+echo ""
+
+POLL_INTERVAL=30
+STATUS_POLL_LIMIT=30
+
+CURRENT_STEP="STATUS_POLLING"
 STATUS=""
 ATTEMPT=1
-
-echo "Starting status polling..."
 
 while true; do
     set +e
@@ -229,8 +247,8 @@ while true; do
         continue
     fi
 
-    STATUS=$(echo "$STATUS_JSON" | jq -r '.status? // empty')
-    echo "STATUS CHECK ($ATTEMPT/${STATUS_POLL_LIMIT}) → $STATUS"
+    STATUS=$(echo "$STATUS_JSON" | jq -r '.status // empty')
+    echo "STATUS CHECK ($ATTEMPT/$STATUS_POLL_LIMIT) → $STATUS"
 
     if [[ "$STATUS" == "SHUTOFF" || "$STATUS" == "STOPPED" ]]; then
         break
@@ -245,35 +263,60 @@ while true; do
     sleep "$POLL_INTERVAL"
 done
 
+echo ""
 echo "LPAR reached final state: $STATUS"
 echo ""
+
 
 # ----------------------------------------------------------------------
 # COMPLETION SUMMARY
 # ----------------------------------------------------------------------
+# ----------------------------------------------------------------
+# Completion Summary
+# ----------------------------------------------------------------
+
+OPTIONAL_STAGE_EXECUTED="No"
+
+echo ""
 echo "==========================="
 echo " JOB COMPLETED SUCCESSFULLY"
 echo "==========================="
-echo "LPAR Name       : $LPAR_NAME"
-echo "Instance ID     : $INSTANCE_ID"
-echo "Final Status    : $STATUS"
-echo "Private IP      : $Private_IP"
-echo "Subnet Assigned : $SUBNET_ID"
+echo "LPAR Name        : ${LPAR_NAME}"
+echo "Instance ID      : ${INSTANCE_ID}"
+echo "Final Status     : ${STATUS}"
+echo "Private IP       : ${Private_IP}"
+echo "Subnet Assigned  : ${SUBNET_ID}"
+echo "Optional Stage   : ${RUN_ATTACH_JOB:-No}"
 echo "==========================="
 echo ""
 
-trap - ERR
+trap - ERR   # disable rollback
 
-# ----------------------------------------------------------------------
-# OPTIONAL DOWNSTREAM JOB TRIGGER
-# ----------------------------------------------------------------------
+# ----------------------------------------------------------------
+# Optional Stage Execution
+# ----------------------------------------------------------------
+
+echo "========================================================================="
+echo "Optional Stage: Execute Snapshot/Attach Process on Primary LPAR"
+echo "========================================================================="
+
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
+    OPTIONAL_STAGE_EXECUTED="Yes"
     echo "Launching downstream job 'snap-attach'..."
+
     set +e
     ibmcloud ce jobrun submit \
         --job snap-attach \
         --output json | jq -r '.name'
     set -e
+
+    echo "Optional Stage execution requested and submitted successfully."
+
 else
-    echo "RUN_ATTACH_JOB=No — downstream job skipped."
+    echo "Optional Stage not executed — '${LPAR_NAME}' will remain in SHUTOFF state"
+    echo "ready for Boot, Data Volume attachment, and Startup."
 fi
+
+echo ""
+echo "Optional Stage Executed: ${OPTIONAL_STAGE_EXECUTED}"
+echo ""
