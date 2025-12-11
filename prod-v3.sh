@@ -77,16 +77,16 @@ echo "Variables loaded successfully."
 # ----------------------------------------------------------------
 # Stage 1 — IBM Cloud Authentication & PowerVS Targeting
 # ----------------------------------------------------------------
-CURRENT_STEP="IBM_CLOUD_LOGIN"
+CURRENT_STEP="IBM_CLOUD_echoIN"
 
 echo "========================================================================="
 echo "Stage 1 of 2: IBM Cloud Authentication and Targeting PowerVS Workspace"
 echo "========================================================================="
 echo ""
 
-# Login using API key
-ibmcloud login --apikey "$API_KEY" -r "$REGION" || {
-    echo "ERROR: IBM Cloud login failed."
+# echoin using API key
+ibmcloud echoin --apikey "$API_KEY" -r "$REGION" || {
+    echo "ERROR: IBM Cloud echoin failed."
     exit 1
 }
 
@@ -125,7 +125,7 @@ echo "IAM token retrieved successfully."
 echo ""
 
 # ----------------------------------------------------------------
-# Stage 2 — Create & Provision LPAR
+# Stage 2 — Create & Provision LPAR (Old Script Behavior / Resilient)
 # ----------------------------------------------------------------
 echo "========================================================================="
 echo "Stage 2 of 2: Create/Deploy PVS LPAR with defined Private IP in Subnet"
@@ -135,74 +135,74 @@ echo ""
 CURRENT_STEP="CREATE_LPAR"
 echo "STEP: Submitting LPAR create request..."
 
-# ----------------------------------------------------------------
-# Construct JSON payload for instance creation
-# ----------------------------------------------------------------
-PAYLOAD=$(cat <<EOF
-{
-    "serverName": "${LPAR_NAME}",
-    "processors": ${PROCESSORS},
-    "memory": ${MEMORY_GB},
-    "procType": "${PROC_TYPE}",
-    "sysType": "${SYS_TYPE}",
-    "imageID": "${IMAGE_ID}",
-    "deploymentType": "${DEPLOYMENT_TYPE}",
-    "keyPairName": "${KEYPAIR_NAME}",
-    "networks": [
-        {
-            "networkID": "${SUBNET_ID}",
-            "ipAddress": "${Private_IP}"
-        }
-    ]
-}
-EOF
-)
-
 API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
 
-echo "Submitting create request to PowerVS API..."
+echo "Sending LPAR creation request to PowerVS API..."
 
-# Capture both body and HTTP status code
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${API_URL}" \
-  -H "Authorization: Bearer ${IAM_TOKEN}" \
-  -H "CRN: ${PVS_CRN}" \
-  -H "Content-Type: application/json" \
-  -d "${PAYLOAD}")
+# ----------------------------------------------------------------
+# Perform API request with resilience and no HTTP-code validation
+# ----------------------------------------------------------------
 
-HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
-HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+ATTEMPTS=0
+MAX_ATTEMPTS=3
+INSTANCE_ID=""
 
-if [[ "$HTTP_CODE" -ne 200 && "$HTTP_CODE" -ne 201 && "$HTTP_CODE" -ne 202 ]]; then
-    echo "FAILURE: API returned HTTP code $HTTP_CODE"
-    echo "Response:"
-    echo "$HTTP_BODY"
-    exit 1
-fi
+while [[ $ATTEMPTS -lt $MAX_ATTEMPTS && -z "$INSTANCE_ID" ]]; do
+    ATTEMPTS=$((ATTEMPTS + 1))
 
-# Extract instance ID from the response — handle all PowerVS JSON formats
-INSTANCE_ID=$(echo "$HTTP_BODY" | jq -r '
-    .pvmInstanceID //
-    .[0].pvmInstanceID //
-    .pvmInstance.pvmInstanceID //
-    empty
-')
+    echo "API attempt ${ATTEMPTS}/${MAX_ATTEMPTS}..."
 
+    # Temporarily disable strict exit behavior
+    set +e
+    RESPONSE=$(curl -s -X POST "${API_URL}" \
+      -H "Authorization: Bearer ${IAM_TOKEN}" \
+      -H "CRN: ${PVS_CRN}" \
+      -H "Content-Type: application/json" \
+      -d "${PAYLOAD}")
+    CURL_CODE=$?
+    set -e
+
+    if [[ $CURL_CODE -ne 0 ]]; then
+        echo "WARNING: curl returned non-zero exit code (${CURL_CODE})."
+        echo "Retrying..."
+        sleep 2
+        continue
+    fi
+
+    # Extract instance ID exactly like the old script
+    INSTANCE_ID=$(echo "$RESPONSE" | jq -r '
+        .pvmInstanceID //
+        .[0].pvmInstanceID //
+        .pvmInstance.pvmInstanceID //
+        empty
+    ')
+    
+    if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
+        echo "WARNING: Instance ID not found in response. Retrying..."
+        sleep 2
+    fi
+done
+
+# ----------------------------------------------------------------
+# Fail ONLY if all retries exhausted AND no instance ID parsed
+# ----------------------------------------------------------------
 if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
-    echo "FAILURE: Could not extract INSTANCE_ID from API response."
-    echo "Debug: Raw API response below:"
-    echo "$HTTP_BODY"
+    echo "FAILURE: Could not extract INSTANCE_ID after ${MAX_ATTEMPTS} attempts."
+    echo "--- Raw API Response (last attempt) ---"
+    echo "$RESPONSE"
     exit 1
 fi
 
-echo "Instance ID: $INSTANCE_ID"
-
-
-echo "Success: LPAR create request accepted."
+echo "Success: LPAR create submitted successfully."
 echo "LPAR Name           = ${LPAR_NAME}"
 echo "Instance ID         = ${INSTANCE_ID}"
 echo "Subnet              = ${SUBNET_ID}"
 echo "Reserved Private IP = ${Private_IP}"
+echo "NOTE: Creation accepted asynchronously by PowerVS."
 echo "LPAR will require IBMi installation media. No volumes were provisioned."
+
+
+echo "Instance ID: $INSTANCE_ID"
 
 # ----------------------------------------------------------------
 # Grace wait period for backend provisioning
