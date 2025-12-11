@@ -1,5 +1,8 @@
 # Use Debian for consistent bash, coreutils, date, awk behavior
 FROM debian:stable-slim
+SHELL ["/bin/bash", "-c"]
+
+
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV HOME=/root
