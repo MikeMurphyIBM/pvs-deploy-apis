@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ----------------------------------------------------------------
-# Timestamp all STDOUT and STDERR
+# Timestamp all STDOUT and STDERR (Code Engine safe)
 # ----------------------------------------------------------------
 timestamp() {
   while IFS= read -r line; do
@@ -10,7 +10,6 @@ timestamp() {
 }
 
 exec > >(timestamp) 2>&1
-
 
 echo "============================================================================"
 echo "Job 1: Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
@@ -30,7 +29,6 @@ rollback() {
 
     if [[ -n "${INSTANCE_ID:-}" ]]; then
         echo "Attempting cleanup of partially created LPAR: ${LPAR_NAME}"
-        # Prefer delete by ID for safety
         ibmcloud pi ins delete "$INSTANCE_ID" || \
             echo "Cleanup attempt failed — manual cleanup may be required."
     fi
@@ -77,26 +75,23 @@ echo "Variables loaded successfully."
 # ----------------------------------------------------------------
 # Stage 1 — IBM Cloud Authentication & PowerVS Targeting
 # ----------------------------------------------------------------
-CURRENT_STEP="IBM_CLOUD_echoIN"
+CURRENT_STEP="IBM_CLOUD_LOGIN"
 
 echo "========================================================================="
 echo "Stage 1 of 2: IBM Cloud Authentication and Targeting PowerVS Workspace"
 echo "========================================================================="
 echo ""
 
-# echoin using API key
-ibmcloud echoin --apikey "$API_KEY" -r "$REGION" || {
-    echo "ERROR: IBM Cloud echoin failed."
+ibmcloud login --apikey "$API_KEY" -r "$REGION" || {
+    echo "ERROR: IBM Cloud login failed."
     exit 1
 }
 
-# Target Resource Group
 ibmcloud target -g "$RESOURCE_GROUP" || {
     echo "ERROR: Failed to target resource group: $RESOURCE_GROUP"
     exit 1
 }
 
-# Target PowerVS Workspace by CRN
 ibmcloud pi workspace target "$PVS_CRN" || {
     echo "ERROR: Failed to target PowerVS workspace: $PVS_CRN"
     exit 1
@@ -125,7 +120,7 @@ echo "IAM token retrieved successfully."
 echo ""
 
 # ----------------------------------------------------------------
-# Stage 2 — Create & Provision LPAR (Old Script Behavior / Resilient)
+# Stage 2 — Create & Provision LPAR (Resilient / Old Behavior)
 # ----------------------------------------------------------------
 echo "========================================================================="
 echo "Stage 2 of 2: Create/Deploy PVS LPAR with defined Private IP in Subnet"
@@ -135,24 +130,40 @@ echo ""
 CURRENT_STEP="CREATE_LPAR"
 echo "STEP: Submitting LPAR create request..."
 
+# JSON Payload for LPAR creation
+PAYLOAD=$(cat <<EOF
+{
+    "serverName": "${LPAR_NAME}",
+    "processors": ${PROCESSORS},
+    "memory": ${MEMORY_GB},
+    "procType": "${PROC_TYPE}",
+    "sysType": "${SYS_TYPE}",
+    "imageID": "${IMAGE_ID}",
+    "deploymentType": "${DEPLOYMENT_TYPE}",
+    "keyPairName": "${KEYPAIR_NAME}",
+    "networks": [
+        {
+            "networkID": "${SUBNET_ID}",
+            "ipAddress": "${Private_IP}"
+        }
+    ]
+}
+EOF
+)
+
 API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${CLOUD_INSTANCE_ID}/pvm-instances?version=${API_VERSION}"
 
 echo "Sending LPAR creation request to PowerVS API..."
 
-# ----------------------------------------------------------------
-# Perform API request with resilience and no HTTP-code validation
-# ----------------------------------------------------------------
-
 ATTEMPTS=0
 MAX_ATTEMPTS=3
-INSTANCE_ID=""
 
+# DO NOT reset INSTANCE_ID here — rollback relies on this variable
 while [[ $ATTEMPTS -lt $MAX_ATTEMPTS && -z "$INSTANCE_ID" ]]; do
     ATTEMPTS=$((ATTEMPTS + 1))
 
     echo "API attempt ${ATTEMPTS}/${MAX_ATTEMPTS}..."
 
-    # Temporarily disable strict exit behavior
     set +e
     RESPONSE=$(curl -s -X POST "${API_URL}" \
       -H "Authorization: Bearer ${IAM_TOKEN}" \
@@ -163,102 +174,90 @@ while [[ $ATTEMPTS -lt $MAX_ATTEMPTS && -z "$INSTANCE_ID" ]]; do
     set -e
 
     if [[ $CURL_CODE -ne 0 ]]; then
-        echo "WARNING: curl returned non-zero exit code (${CURL_CODE})."
-        echo "Retrying..."
-        sleep 2
+        echo "WARNING: curl exit code $CURL_CODE — retrying..."
+        sleep 5
         continue
     fi
 
-    # Extract instance ID exactly like the old script
+    # Extract instance ID (resilient legacy logic)
     INSTANCE_ID=$(echo "$RESPONSE" | jq -r '
         .pvmInstanceID //
         .[0].pvmInstanceID //
         .pvmInstance.pvmInstanceID //
         empty
     ')
-    
+
     if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
-        echo "WARNING: Instance ID not found in response. Retrying..."
-        sleep 2
+        echo "WARNING: No instance ID returned — retrying..."
+        sleep 5
     fi
 done
 
-# ----------------------------------------------------------------
-# Fail ONLY if all retries exhausted AND no instance ID parsed
-# ----------------------------------------------------------------
 if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
-    echo "FAILURE: Could not extract INSTANCE_ID after ${MAX_ATTEMPTS} attempts."
-    echo "--- Raw API Response (last attempt) ---"
+    echo "FAILURE: Unable to extract INSTANCE_ID after ${MAX_ATTEMPTS} attempts."
+    echo "Last API Response:"
     echo "$RESPONSE"
     exit 1
 fi
 
-echo "Success: LPAR create submitted successfully."
-echo "LPAR Name           = ${LPAR_NAME}"
-echo "Instance ID         = ${INSTANCE_ID}"
-echo "Subnet              = ${SUBNET_ID}"
-echo "Reserved Private IP = ${Private_IP}"
-echo "NOTE: Creation accepted asynchronously by PowerVS."
-echo "LPAR will require IBMi installation media. No volumes were provisioned."
-
-
-echo "Instance ID: $INSTANCE_ID"
+echo "SUCCESS: LPAR creation submitted."
+echo "Instance ID: ${INSTANCE_ID}"
+echo "Subnet:      ${SUBNET_ID}"
+echo "Private IP:  ${Private_IP}"
+echo ""
 
 # ----------------------------------------------------------------
-# Grace wait period for backend provisioning
+# Grace Period for Backend Provisioning
 # ----------------------------------------------------------------
-GRACE_TOTAL_SECONDS=360     # 6 minutes
-GRACE_STEP_SECONDS=90       # 90-second intervals
+GRACE_TOTAL_SECONDS=360
+GRACE_STEP_SECONDS=90
 elapsed=0
 
-echo ""
-echo "Provisioning request accepted. Waiting several minutes before checking status..."
-echo "(Provisioning will occur asynchronously within PowerVS.)"
-echo ""
+echo "Waiting ${GRACE_TOTAL_SECONDS} seconds for provisioning window..."
 
 while [[ $elapsed -lt $GRACE_TOTAL_SECONDS ]]; do
-    printf "Provisioning in progress... LPAR not online yet (%02d:%02d elapsed)\n" \
+    printf "Provisioning... (%02d:%02d elapsed)\n" \
         $((elapsed / 60)) $((elapsed % 60))
     sleep "$GRACE_STEP_SECONDS"
     elapsed=$((elapsed + GRACE_STEP_SECONDS))
 done
 
 echo ""
-echo "Initial provisioning window complete."
-echo "Beginning actual status polling now..."
+echo "Provisioning window complete — beginning status polling."
 echo ""
 
 # ----------------------------------------------------------------
-# Poll Instance Status
+# Poll for SHUTOFF / STOPPED
 # ----------------------------------------------------------------
 CURRENT_STEP="STATUS_POLLING"
-echo "STEP: Polling for LPAR status: Waiting for SHUTOFF or STOPPED (Provisioned)"
+echo "STEP: Polling for final LPAR status..."
 
 STATUS=""
 ATTEMPT=1
 
 while true; do
 
-    STATUS=$(ibmcloud pi ins get "$INSTANCE_ID" --json | jq -r '.status' || echo "")
+    set +e
+    STATUS_JSON=$(ibmcloud pi ins get "$INSTANCE_ID" --json 2>/dev/null)
+    STATUS_EXIT=$?
+    set -e
 
-    if [[ -z "$STATUS" ]]; then
-        echo "WARNING: Status query failed... retrying"
-    else
-        echo "STATUS CHECK ($ATTEMPT/${STATUS_POLL_LIMIT}) → STATUS: $STATUS"
+    if [[ $STATUS_EXIT -ne 0 ]]; then
+        echo "WARNING: Status retrieval failed — retrying"
+        sleep "$POLL_INTERVAL"
+        continue
     fi
 
-    # Final acceptable states
+    STATUS=$(echo "$STATUS_JSON" | jq -r '.status // empty')
+
+    echo "STATUS CHECK ($ATTEMPT/${STATUS_POLL_LIMIT}) → $STATUS"
+
     if [[ "$STATUS" == "SHUTOFF" || "$STATUS" == "STOPPED" ]]; then
         break
     fi
 
-    if [[ "$STATUS" == "ACTIVE" ]]; then
-        echo "LPAR runnable but not finalized yet; continuing to poll..."
-    fi
-
     if [[ $ATTEMPT -gt $STATUS_POLL_LIMIT ]]; then
-        echo "FAILURE: State transition timed out."
-        echo "Last known status: $STATUS"
+        echo "FAILURE: Status polling timed out."
         exit 1
     fi
 
@@ -267,71 +266,55 @@ while true; do
 done
 
 echo ""
-echo "Stage 2 Complete: IBMi partition is ready for Snapshot/Clone Operations."
+echo "LPAR reached final state: $STATUS"
 echo ""
 
 # ----------------------------------------------------------------
-# Completion Summary
+# Job Completion Summary
 # ----------------------------------------------------------------
-echo ""
 echo "==========================="
 echo " JOB COMPLETED SUCCESSFULLY"
 echo "==========================="
-echo "LPAR Name         : ${LPAR_NAME}"
-echo "Final Status      : ${STATUS}"
-echo "Private IP        : ${Private_IP}"
-echo "Subnet Assigned   : ${SUBNET_ID}"
-echo "Storage Attached  : NO"
-echo "Next Job Enabled  : ${RUN_ATTACH_JOB:-No}"
+echo "LPAR Name       : ${LPAR_NAME}"
+echo "Instance ID     : ${INSTANCE_ID}"
+echo "Final Status    : ${STATUS}"
+echo "Private IP      : ${Private_IP}"
+echo "Subnet          : ${SUBNET_ID}"
+echo "Storage Attached: NO"
+echo "Next Job Enabled: ${RUN_ATTACH_JOB:-No}"
 echo "==========================="
 echo ""
 
-echo "Job Completed Successfully"
 echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-# ----------------------------------------------------------------
-# Disable rollback trap after successful completion
-# ----------------------------------------------------------------
 trap - ERR
 
 # ----------------------------------------------------------------
-# Trigger Next Job (optional)
+# Optional Next Job Trigger
 # ----------------------------------------------------------------
 CURRENT_STEP="SUBMIT_NEXT_JOB"
-echo "STEP: Evaluate triggering next Code Engine job..."
+echo "Checking for downstream job trigger..."
 
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
-    echo "Next job execution requested — attempting launch of 'snap-attach'..."
+    echo "Launching downstream job: snap-attach..."
 
-    # Do NOT stop on failure in this section
     set +e
-
-    # Submit next run
     NEXT_RUN=$(ibmcloud ce jobrun submit \
         --job snap-attach \
         --output json 2>/dev/null | jq -r '.name')
-
-    sleep 2
-
-    # Try obtaining latest run name from CE directly
+    sleep 10
     LATEST_RUN=$(ibmcloud ce jobrun list \
         --job snap-attach \
         --output json 2>/dev/null | jq -r '.[0].name')
-
     set -e
 
-    echo ""
-    echo "--- Verification of next job submission ---"
-
+    echo "--- Downstream Job Verification ---"
     if [[ "$LATEST_RUN" != "null" && -n "$LATEST_RUN" ]]; then
-        echo "SUCCESS: Verified downstream CE job started:"
-        echo " → Job Name: snap-attach"
-        echo " → Run ID  : $LATEST_RUN"
+        echo "SUCCESS: Downstream CE job started: $LATEST_RUN"
     else
-        echo "[WARNING] Could not confirm downstream job start."
-        echo "[WARNING] Manual review recommended."
+        echo "WARNING: Unable to confirm downstream job start."
     fi
-
 else
-    echo "RUN_ATTACH_JOB=No — downstream job trigger skipped."
+    echo "RUN_ATTACH_JOB=No — skipping downstream job."
 fi
+
