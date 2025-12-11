@@ -104,12 +104,19 @@ echo ""
 CURRENT_STEP="IAM_TOKEN_RETRIEVAL"
 echo "Fetching IAM access token..."
 
-IAM_TOKEN=$(ibmcloud iam oauth-tokens --output JSON | jq -r '.iam_token | split(" ")[1]')
+IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "Accept: application/json" \
+  -d "grant_type=urn:ibm:params:oauth:grant-type:apikey" \
+  -d "apikey=${API_KEY}" )
+
+IAM_TOKEN=$(echo "$IAM_RESPONSE" | jq -r '.access_token')
 
 if [[ -z "$IAM_TOKEN" || "$IAM_TOKEN" == "null" ]]; then
-    echo "ERROR: IAM token retrieval failed."
+    echo "ERROR: IAM token retrieval failed"
     exit 1
 fi
+
 
 export IAM_TOKEN
 echo "IAM token retrieved successfully."
