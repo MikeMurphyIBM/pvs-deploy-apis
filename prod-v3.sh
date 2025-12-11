@@ -3,8 +3,10 @@
 # ----------------------------------------------------------------
 # Timestamp all STDOUT and STDERR
 # ----------------------------------------------------------------
-exec > >(awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush() }') \
-     2> >(awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush() }')
+#exec > >(awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush() }') \
+#     2> >(awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush() }')
+
+echo "script started"
 
 echo "============================================================================"
 echo "Job 1: Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
