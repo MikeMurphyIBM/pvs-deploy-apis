@@ -3,14 +3,14 @@
 # ----------------------------------------------------------------
 # Timestamp all STDOUT and STDERR — CE safe
 # ----------------------------------------------------------------
-timestamp() {
-  while IFS= read -r line; do
-    printf "[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$line"
-  done
-}
+#timestamp() {
+ # while IFS= read -r line; do
+ #   printf "[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$line"
+ # done
+#}
 
 # Send stdout+stderr through timestamp without causing pipefail issues
-exec > >(timestamp) 2>&1
+#exec > >(timestamp) 2>&1
 
 echo "============================================================================"
 echo "Job 1: Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operations"
