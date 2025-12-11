@@ -173,14 +173,23 @@ if [[ "$HTTP_CODE" -ne 200 && "$HTTP_CODE" -ne 201 && "$HTTP_CODE" -ne 202 ]]; t
     exit 1
 fi
 
-# Extract instance ID from body
-INSTANCE_ID=$(echo "$HTTP_BODY" | jq -r '.pvmInstanceID')
+# Extract instance ID from the response — handle all PowerVS JSON formats
+INSTANCE_ID=$(echo "$HTTP_BODY" | jq -r '
+    .pvmInstanceID //
+    .[0].pvmInstanceID //
+    .pvmInstance.pvmInstanceID //
+    empty
+')
 
 if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
-    echo "FAILURE: Could not extract instance ID from API response."
+    echo "FAILURE: Could not extract INSTANCE_ID from API response."
+    echo "Debug: Raw API response below:"
     echo "$HTTP_BODY"
     exit 1
 fi
+
+echo "Instance ID: $INSTANCE_ID"
+
 
 echo "Success: LPAR create request accepted."
 echo "LPAR Name           = ${LPAR_NAME}"
