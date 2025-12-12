@@ -25,9 +25,9 @@ rollback() {
     echo "An error occurred in step: ${CURRENT_STEP:-UNKNOWN}"
     echo "----------------------------------------------------"
 
-    if [[ -n "${INSTANCE_ID:-}" ]]; then
+    if [[ -n "${LPAR_INSTANCE_ID:-}" ]]; then
         echo "Attempting cleanup of partially created LPAR: ${LPAR_NAME}"
-        ibmcloud pi ins delete "$INSTANCE_ID" || \
+        ibmcloud pi ins delete "$LPAR_INSTANCE_ID" || \
             echo "Cleanup attempt failed — manual cleanup may be required."
     fi
 
@@ -154,9 +154,9 @@ ATTEMPTS=0
 MAX_ATTEMPTS=3
 
 # ----------------------------------------------------------------------
-# LOOP UNTIL INSTANCE_ID IS FOUND (SAFE AGAINST jq FAILURES)
+# LOOP UNTIL LPAR_INSTANCE_ID IS FOUND (SAFE AGAINST jq FAILURES)
 # ----------------------------------------------------------------------
-while [[ $ATTEMPTS -lt $MAX_ATTEMPTS && -z "$INSTANCE_ID" ]]; do
+while [[ $ATTEMPTS -lt $MAX_ATTEMPTS && -z "$LPAR_INSTANCE_ID" ]]; do
     ATTEMPTS=$((ATTEMPTS + 1))
     echo "API attempt ${ATTEMPTS}/${MAX_ATTEMPTS}..."
 
@@ -176,22 +176,22 @@ while [[ $ATTEMPTS -lt $MAX_ATTEMPTS && -z "$INSTANCE_ID" ]]; do
     fi
 
     # SAFE JQ PARSER — never terminates script on errors
-    INSTANCE_ID=$(echo "$RESPONSE" | jq -r '
+   LPAR_INSTANCE_ID=$(echo "$RESPONSE" | jq -r '
         .pvmInstanceID? //
         (.[0].pvmInstanceID? // empty) //
         .pvmInstance.pvmInstanceID? //
         empty
     ' 2>/dev/null || true)
 
-    if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
-        echo "WARNING: Could not extract INSTANCE_ID — retrying..."
+    if [[ -z "$LPAR_INSTANCE_ID" || "$LPAR_INSTANCE_ID" == "null" ]]; then
+        echo "WARNING: Could not extract LPAR_INSTANCE_ID — retrying..."
         sleep 5
     fi
 done
 
 # FAIL AFTER MAX ATTEMPTS
-if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
-    echo "FAILURE: Could not retrieve INSTANCE_ID after ${MAX_ATTEMPTS} attempts."
+if [[ -z "$LPAR_INSTANCE_ID" || "$LPAR_INSTANCE_ID" == "null" ]]; then
+    echo "FAILURE: Could not retrieve LPAR_INSTANCE_ID after ${MAX_ATTEMPTS} attempts."
     echo "API Response:"
     echo "$RESPONSE"
     exit 1
@@ -199,7 +199,7 @@ fi
 
 echo "SUCCESS: LPAR creation submitted."
 echo "LPAR NAME:  $LPAR_NAME"
-echo "Instance ID: $INSTANCE_ID"
+echo "Instance ID: $LPAR_INSTANCE_ID"
 echo "Private IP:  $Private_IP"
 echo "Subnet ID: $SUBNET_ID"
 echo "LPAR Cores: $PROCESSORS"
@@ -230,7 +230,7 @@ ATTEMPT=1
 
 while true; do
     set +e
-    STATUS_JSON=$(ibmcloud pi ins get "$INSTANCE_ID" --json 2>/dev/null)
+    STATUS_JSON=$(ibmcloud pi ins get "$LPAR_INSTANCE_ID" --json 2>/dev/null)
     STATUS_EXIT=$?
     set -e
 
@@ -274,7 +274,7 @@ echo "==========================="
 echo " JOB 1 COMPLETED SUCCESSFULLY"
 echo "==========================="
 echo "LPAR Name        : ${LPAR_NAME}"
-echo "Instance ID      : ${INSTANCE_ID}"
+echo "Instance ID      : ${LPAR_INSTANCE_ID}"
 echo "Final Status     : ${STATUS}"
 echo "Private IP       : ${Private_IP}"
 echo "Subnet Assigned  : ${SUBNET_ID}"
