@@ -312,6 +312,8 @@ echo "========================================================================="
 echo "Optional Stage: Execute Snapshot/Attach Process on Primary LPAR"
 echo "========================================================================="
 
+NEXT_RUN=""   # ensure variable exists
+
 if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     OPTIONAL_STAGE_EXECUTED="Yes"
     echo "Switching Code Engine context to IBMi project..."
@@ -327,7 +329,7 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     # Capture ALL output (stdout + stderr)
     RAW_SUBMISSION=$(ibmcloud ce jobrun submit --job prod-snap --output json 2>&1)
 
-    # Extract only the JSON portion (defensive against CLI chatter)
+    # Extract only the JSON portion (defensive)
     JSON_ONLY=$(echo "$RAW_SUBMISSION" | sed -n '/^{/,$p')
 
     # Extract jobrun name
@@ -347,3 +349,24 @@ else
     OPTIONAL_STAGE_EXECUTED="No"
     echo "Optional Stage NOT executed — '${LPAR_NAME}' will remain in SHUTOFF state ready for Boot & Data Volume attachment and subsequent OS Startup."
 fi
+
+echo "Job 1 Completed Successfully"
+
+JOB_SUCCESS=1
+
+# --------------------------------------------------
+# OPTIONAL: Follow logs of the next Code Engine job
+# (Best-effort only; never fail Job 1)
+# --------------------------------------------------
+if [[ -n "$NEXT_RUN" ]]; then
+    echo "Attempting to stream logs for next jobrun: $NEXT_RUN"
+    echo "(Non-blocking / best-effort — failure is ignored)"
+
+    (
+        set +e
+        ibmcloud ce jobrun logs -f -n "$NEXT_RUN" || true
+    )
+fi
+
+sleep 1
+exit 0
