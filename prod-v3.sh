@@ -119,9 +119,7 @@ export IAM_TOKEN
 echo "IAM token retrieved successfully."
 echo ""
 
-# ----------------------------------------------------------------------
-# STAGE 2 — CREATE LPAR (CE-SAFE, RESILIENT)
-# ----------------------------------------------------------------------
+
 echo "========================================================================="
 echo "Stage 2 of 2: Create/Deploy PVS LPAR"
 echo "========================================================================="
@@ -200,7 +198,7 @@ if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "null" ]]; then
 fi
 
 echo "SUCCESS: LPAR creation submitted."
-echo "LPAR NAMR:  $LPAR_NAME"
+echo "LPAR NAME:  $LPAR_NAME"
 echo "Instance ID: $INSTANCE_ID"
 echo "Private IP:  $Private_IP"
 echo "Subnet ID: $SUBNET_ID"
@@ -249,10 +247,11 @@ while true; do
         break
     fi
 
-    if (( ATTEMPT > STATUS_POLL_LIMIT )); then
-        echo "FAILURE: status polling timed out."
-        exit 1
+    if (( ATTEMPT >= STATUS_POLL_LIMIT )); then
+      echo "FAILURE: status polling timed out."
+      exit 1
     fi
+
 
     ((ATTEMPT++))
     sleep "$POLL_INTERVAL"
@@ -285,28 +284,7 @@ echo ""
 
 trap - ERR   # disable rollback
 
-# ----------------------------------------------------------------
-# Optional Stage Execution
-# ----------------------------------------------------------------
 
-
-
-# first attempt but didnt target CE job
-# if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
-#    OPTIONAL_STAGE_EXECUTED="Yes"
-#    echo "Launching downstream job 'snap-attach'..."
-
-#    set +e
-#    ibmcloud ce jobrun submit \
-#        --job prod-snap \
-#        --output json | jq -r '.name'
-#    set -e
-
-
-
-# else
-#    echo "Optional Stage NOT executed — '${LPAR_NAME}' will remain in SHUTOFF state ready for Boot & Data Volume attachment and subsequent OS Startup."
-# fi
 
 echo "========================================================================="
 echo "Optional Stage: Execute Snapshot/Attach Process on Primary LPAR"
@@ -318,7 +296,7 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     OPTIONAL_STAGE_EXECUTED="Yes"
     echo "Switching Code Engine context to IBMi project..."
 
-    # Target the CE project
+    # Target the Code Engine project
     ibmcloud ce project target --name IBMi > /dev/null 2>&1 || {
         echo "ERROR: Unable to select project IBMi for optional attach stage."
         exit 1
@@ -326,14 +304,13 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
 
     echo "Submitting Code Engine jobrun: prod-snap"
 
-    # Capture ALL output (stdout + stderr)
-    RAW_SUBMISSION=$(ibmcloud ce jobrun submit --job prod-snap --output json 2>&1)
+    # Capture stdout + stderr (CLI may mix them)
+    RAW_SUBMISSION=$(ibmcloud ce jobrun submit \
+        --job prod-snap \
+        --output json 2>&1)
 
-    # Extract only the JSON portion (defensive)
-    JSON_ONLY=$(echo "$RAW_SUBMISSION" | sed -n '/^{/,$p')
-
-    # Extract jobrun name
-    NEXT_RUN=$(echo "$JSON_ONLY" | jq -r '.metadata.name // .name // empty')
+    # Extract jobrun name (robust across CLI versions)
+    NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // .name // empty')
 
     if [[ -z "$NEXT_RUN" ]]; then
         echo "ERROR: Job submission returned no jobrun name."
@@ -343,7 +320,6 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
     fi
 
     echo "Triggered attach instance: $NEXT_RUN"
-    echo "Optional Stage execution submitted successfully."
 
 else
     OPTIONAL_STAGE_EXECUTED="No"
@@ -353,20 +329,5 @@ fi
 echo "Job 1 Completed Successfully"
 
 JOB_SUCCESS=1
-
-# --------------------------------------------------
-# OPTIONAL: Follow logs of the next Code Engine job
-# (Best-effort only; never fail Job 1)
-# --------------------------------------------------
-if [[ -n "$NEXT_RUN" ]]; then
-    echo "Attempting to stream logs for next jobrun: $NEXT_RUN"
-    echo "(Non-blocking / best-effort — failure is ignored)"
-
-    (
-        set +e
-        ibmcloud ce jobrun logs -f -n "$NEXT_RUN" || true
-    )
-fi
-
 sleep 1
 exit 0
