@@ -209,8 +209,8 @@ echo ""
 # ----------------------------------------------------------------------
 # WAIT 90 SEC FOR POWER VS INTERNAL PROVISIONING
 # ----------------------------------------------------------------------
-echo "Initial provisioning window: waiting 90 seconds before first status check..."
-sleep 90
+echo "Initial provisioning window: waiting 45 seconds before first status check..."
+sleep 45
 
 echo ""
 echo "Beginning status polling (every 30 seconds)..."
