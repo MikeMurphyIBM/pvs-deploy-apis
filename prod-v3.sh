@@ -325,17 +325,16 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
 
     echo "Submitting Code Engine jobrun: prod-snap"
 
-    # Capture ALL output (stdout + stderr)
+    # Capture all output (stdout + stderr)
     RAW_SUBMISSION=$(ibmcloud ce jobrun submit --job prod-snap --output json 2>&1)
 
-    echo "Jobrun submission response:"
-    echo "$RAW_SUBMISSION"
-
-    # Extract name safely
-    NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.name // empty')
+    # Extract ONLY the jobrun name (no full JSON)
+    NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // .name // empty')
 
     if [[ -z "$NEXT_RUN" ]]; then
         echo "ERROR: Job submission returned no jobrun name."
+        echo "Raw submission output:"
+        echo "$RAW_SUBMISSION"
         exit 1
     fi
 
@@ -346,5 +345,6 @@ else
     OPTIONAL_STAGE_EXECUTED="No"
     echo "Optional Stage NOT executed — '${LPAR_NAME}' will remain in SHUTOFF state ready for Boot & Data Volume attachment and subsequent OS Startup."
 fi
+
 
 
