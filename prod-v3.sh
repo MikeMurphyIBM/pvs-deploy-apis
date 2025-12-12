@@ -13,7 +13,8 @@ echo "Job 1: Empty IBMi LPAR Provisioning for Snapshot/Clone and Backup Operatio
 echo "============================================================================"
 echo ""
 
-set -euo pipefail
+set -eu
+
 
 # ----------------------------------------------------------------------
 # ROLLBACK — used when any unhandled error occurs
@@ -107,7 +108,8 @@ IAM_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
   -d "grant_type=urn:ibm:params:oauth:grant-type:apikey" \
   -d "apikey=${API_KEY}" )
 
-IAM_TOKEN=$(echo "$IAM_RESPONSE" | jq -r '.access_token')
+IAM_TOKEN=$(echo "$IAM_RESPONSE" | jq -r '.access_token // empty' 2>/dev/null || true)
+
 
 if [[ -z "$IAM_TOKEN" || "$IAM_TOKEN" == "null" ]]; then
     echo "ERROR: IAM token retrieval failed"
