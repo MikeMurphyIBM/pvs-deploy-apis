@@ -154,6 +154,8 @@ API_URL="https://${REGION}.power-iaas.cloud.ibm.com/pcloud/v1/cloud-instances/${
 
 ATTEMPTS=0
 MAX_ATTEMPTS=3
+LPAR_INSTANCE_ID=""
+
 
 # ----------------------------------------------------------------------
 # LOOP UNTIL LPAR_INSTANCE_ID IS FOUND (SAFE AGAINST jq FAILURES)
@@ -242,7 +244,7 @@ while true; do
         continue
     fi
 
-    STATUS=$(echo "$STATUS_JSON" | jq -r '.status // empty')
+    STATUS=$(echo "$STATUS_JSON" | jq -r '.status // empty' 2>/dev/null || true)
     echo "STATUS CHECK ($ATTEMPT/$STATUS_POLL_LIMIT) → $STATUS"
 
     if [[ "$STATUS" == "SHUTOFF" || "$STATUS" == "STOPPED" ]]; then
@@ -312,7 +314,8 @@ if [[ "${RUN_ATTACH_JOB:-No}" == "Yes" ]]; then
         --output json 2>&1)
 
     # Extract jobrun name (robust across CLI versions)
-    NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // .name // empty')
+    NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // .name // empty' 2>/dev/null || true)
+
 
     if [[ -z "$NEXT_RUN" ]]; then
         echo "ERROR: Job submission returned no jobrun name."
