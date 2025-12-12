@@ -55,9 +55,10 @@ COPY prod-v3.sh /prod-v3.sh
 RUN sed -i 's/\r$//' /prod-v3.sh && chmod +x /prod-v3.sh
 
 # -----------------------------------------------------------
-# Run the job script
+# Run the script
 # -----------------------------------------------------------
-CMD /prod-v3.sh | ts '[%Y-%m-%d %H:%M:%S]'
+CMD ["/prod-v3.sh"]
+
 
 
 
